@@ -10,9 +10,10 @@ import {
   Dumbbell,
   ChartNoAxesColumnIncreasing,
   BookOpen,
-  CalendarDays,
   LogOut,
+  CalendarDays,
   ChevronRight,
+  RefreshCw,
   type LucideIcon,
 } from "lucide-react";
 import { createClient } from "../lib/supabase/client";
@@ -24,18 +25,32 @@ type Section =
   | "progress"
   | "library";
 
+type MealType =
+  | "breakfast"
+  | "morning_snack"
+  | "lunch"
+  | "lunch_dessert"
+  | "afternoon_snack"
+  | "dinner"
+  | "dinner_dessert";
+
+type PlannedMeal = {
+  id: string;
+  meal_type: string;
+  meal_name_snapshot: string | null;
+};
+
 type NavItem = {
   id: Section;
   title: string;
   shortTitle: string;
-  description: string;
   icon: LucideIcon;
 };
 
 const C = {
   green: "#7D8C82",
   darkGreen: "#687A6D",
-  background: "#F7F8F6",
+  bg: "#F7F8F6",
   text: "#25382F",
   muted: "#7C8980",
   border: "#E5EAE5",
@@ -43,49 +58,63 @@ const C = {
   white: "#FFFFFF",
 };
 
+const mealTypes: {
+  id: MealType;
+  label: string;
+}[] = [
+  { id: "breakfast", label: "Desayuno" },
+  { id: "morning_snack", label: "Media mañana" },
+  { id: "lunch", label: "Almuerzo" },
+  { id: "lunch_dessert", label: "Postre del almuerzo" },
+  { id: "afternoon_snack", label: "Merienda" },
+  { id: "dinner", label: "Cena" },
+  { id: "dinner_dessert", label: "Postre de la cena" },
+];
+
 const navigation: NavItem[] = [
   {
     id: "home",
     title: "Inicio",
     shortTitle: "Inicio",
-    description: "",
     icon: House,
   },
   {
     id: "nutrition",
     title: "Nutrición",
     shortTitle: "Nutrición",
-    description: "Menús, recetas y compra semanal",
     icon: Salad,
   },
   {
     id: "training",
     title: "Entrenamiento",
     shortTitle: "Entreno",
-    description: "Ejercicios, series y pesos",
     icon: Dumbbell,
   },
   {
     id: "progress",
     title: "Mi progreso",
     shortTitle: "Progreso",
-    description: "Medidas y evolución corporal",
     icon: ChartNoAxesColumnIncreasing,
   },
   {
     id: "library",
     title: "Biblioteca",
     shortTitle: "Biblioteca",
-    description: "Planes e históricos",
     icon: BookOpen,
   },
 ];
 
-const sections = navigation.filter(
-  (item) => item.id !== "home"
-);
+function localDate() {
+  const now = new Date();
 
-function todayText() {
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
+function formattedDate() {
   return new Intl.DateTimeFormat("es-ES", {
     weekday: "long",
     day: "numeric",
@@ -96,24 +125,29 @@ function todayText() {
 export default function HomePage() {
   const router = useRouter();
 
-  const [section, setSection] =
-    useState<Section>("home");
-  const [checkingSession, setCheckingSession] =
-    useState(true);
-  const [loggingOut, setLoggingOut] =
-    useState(false);
-  const [dateLabel, setDateLabel] = useState("");
+  const [section, setSection] = useState<Section>("home");
+  const [checkingSession, setCheckingSession] = useState(true);
+  const [loggingOut, setLoggingOut] = useState(false);
+
+  const [today, setToday] = useState("");
+  const [todayLabel, setTodayLabel] = useState("");
+
+  const [meals, setMeals] = useState<PlannedMeal[]>([]);
+  const [loadingMeals, setLoadingMeals] = useState(true);
+  const [mealError, setMealError] = useState("");
 
   useEffect(() => {
-    setDateLabel(todayText());
-
     let active = true;
     const supabase = createClient();
 
-    async function checkSession() {
+    async function initialize() {
+      const date = localDate();
+
+      setToday(date);
+      setTodayLabel(formattedDate());
+
       try {
-        const { data, error } =
-          await supabase.auth.getUser();
+        const { data, error } = await supabase.auth.getUser();
 
         if (!active) return;
 
@@ -128,12 +162,46 @@ export default function HomePage() {
       }
     }
 
-    checkSession();
+    initialize();
 
     return () => {
       active = false;
     };
   }, [router]);
+
+  useEffect(() => {
+    if (checkingSession || !today) return;
+
+    let active = true;
+    const supabase = createClient();
+
+    async function loadMeals() {
+      setLoadingMeals(true);
+      setMealError("");
+
+      const { data, error } = await supabase
+        .from("weekly_meal_plans")
+        .select("id, meal_type, meal_name_snapshot")
+        .eq("meal_date", today);
+
+      if (!active) return;
+
+      if (error) {
+        setMealError("No se pudo cargar el menú de hoy.");
+        setMeals([]);
+      } else {
+        setMeals((data ?? []) as PlannedMeal[]);
+      }
+
+      setLoadingMeals(false);
+    }
+
+    loadMeals();
+
+    return () => {
+      active = false;
+    };
+  }, [checkingSession, today]);
 
   function navigate(destination: Section) {
     setSection(destination);
@@ -147,7 +215,7 @@ export default function HomePage() {
     const { error } = await supabase.auth.signOut();
 
     if (error) {
-      alert("No se pudo cerrar la sesión.");
+      alert("No se pudo cerrar sesión.");
       setLoggingOut(false);
       return;
     }
@@ -163,7 +231,7 @@ export default function HomePage() {
           minHeight: "100dvh",
           display: "grid",
           placeItems: "center",
-          background: C.background,
+          background: C.bg,
           color: C.green,
         }}
       >
@@ -180,7 +248,7 @@ export default function HomePage() {
     <main
       style={{
         minHeight: "100dvh",
-        background: C.background,
+        background: C.bg,
         color: C.text,
         fontFamily: "inherit",
       }}
@@ -199,42 +267,41 @@ export default function HomePage() {
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
-            marginBottom: 30,
+            marginBottom: 27,
           }}
         >
           <button
             type="button"
             onClick={() => navigate("home")}
-            aria-label="Ir al inicio"
             style={{
               display: "flex",
               alignItems: "center",
               gap: 11,
+              padding: 0,
               border: "none",
               background: "transparent",
-              padding: 0,
               cursor: "pointer",
               fontFamily: "inherit",
             }}
           >
             <Image
               src="/isotipo.png"
-              alt="Logo FORMA"
-              width={48}
-              height={48}
+              alt="FORMA"
+              width={45}
+              height={45}
               priority
               style={{
-                borderRadius: 13,
+                borderRadius: 12,
                 objectFit: "contain",
               }}
             />
 
             <span
               style={{
+                color: C.green,
                 fontSize: 16,
                 fontWeight: 600,
                 letterSpacing: "0.16em",
-                color: C.green,
               }}
             >
               FORMA
@@ -246,16 +313,15 @@ export default function HomePage() {
             onClick={logout}
             disabled={loggingOut}
             aria-label="Cerrar sesión"
-            title="Cerrar sesión"
             style={{
-              width: 44,
-              height: 44,
-              border: `1px solid ${C.border}`,
-              borderRadius: 14,
-              background: C.white,
-              color: C.green,
+              width: 43,
+              height: 43,
               display: "grid",
               placeItems: "center",
+              background: C.white,
+              color: C.green,
+              border: `1px solid ${C.border}`,
+              borderRadius: 13,
               cursor: "pointer",
             }}
           >
@@ -265,52 +331,235 @@ export default function HomePage() {
 
         {section === "home" ? (
           <>
-            {/* BIENVENIDA */}
-            <section style={{ marginBottom: 26 }}>
+            {/* TÍTULO */}
+            <section style={{ marginBottom: 23 }}>
               <p
                 style={{
-                  fontSize: 10,
-                  fontWeight: 600,
-                  letterSpacing: "0.12em",
                   color: C.green,
-                  margin: "0 0 9px",
+                  fontSize: 11,
+                  fontWeight: 600,
+                  letterSpacing: "0.09em",
+                  textTransform: "uppercase",
+                  margin: "0 0 7px",
                 }}
               >
-                TU BIENESTAR, A TU RITMO
+                {todayLabel}
               </p>
 
               <h1
                 style={{
-                  fontSize: "clamp(27px, 7vw, 36px)",
+                  fontSize: 29,
                   fontWeight: 600,
-                  lineHeight: 1.2,
                   letterSpacing: "-0.04em",
-                  margin: "0 0 9px",
+                  margin: "0 0 7px",
                 }}
               >
-                Cada día cuenta.
+                Mi día de hoy
               </h1>
 
               <p
                 style={{
-                  fontSize: 13,
+                  fontSize: 12,
                   color: C.muted,
-                  lineHeight: 1.7,
                   margin: 0,
                 }}
               >
-                Organiza tus hábitos y sigue tu evolución.
+                Tu alimentación y entrenamiento diario.
               </p>
             </section>
 
-            {/* MI DÍA */}
+            {/* MENÚ DE HOY */}
+            <section
+              style={{
+                background: C.white,
+                border: `1px solid ${C.border}`,
+                borderRadius: 21,
+                padding: "19px 17px",
+                marginBottom: 17,
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => navigate("nutrition")}
+                style={{
+                  width: "100%",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: 0,
+                  border: "none",
+                  background: "transparent",
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                  color: C.text,
+                }}
+              >
+                <span
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    fontSize: 16,
+                    fontWeight: 600,
+                  }}
+                >
+                  <Salad
+                    size={22}
+                    color={C.green}
+                    strokeWidth={1.7}
+                  />
+                  Mi menú de hoy
+                </span>
+
+                <ChevronRight
+                  size={19}
+                  color={C.green}
+                />
+              </button>
+
+              <div
+                style={{
+                  height: 1,
+                  background: C.border,
+                  margin: "17px 0",
+                }}
+              />
+
+              {loadingMeals ? (
+                <p
+                  style={{
+                    color: C.muted,
+                    fontSize: 12,
+                  }}
+                >
+                  Cargando tu menú...
+                </p>
+              ) : mealError ? (
+                <div>
+                  <p
+                    role="alert"
+                    style={{
+                      color: "#B45353",
+                      fontSize: 12,
+                    }}
+                  >
+                    {mealError}
+                  </p>
+
+                  <button
+                    type="button"
+                    onClick={() => window.location.reload()}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                      background: "transparent",
+                      border: "none",
+                      color: C.green,
+                      cursor: "pointer",
+                    }}
+                  >
+                    <RefreshCw size={15} />
+                    Reintentar
+                  </button>
+                </div>
+              ) : (
+                <div
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: 17,
+                  }}
+                >
+                  {mealTypes.map((type, index) => {
+                    const meal = meals.find(
+                      (item) => item.meal_type === type.id
+                    );
+
+                    return (
+                      <div
+                        key={type.id}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 12,
+                        }}
+                      >
+                        <div
+                          style={{
+                            width: 33,
+                            height: 33,
+                            flexShrink: 0,
+                            borderRadius: 10,
+                            display: "grid",
+                            placeItems: "center",
+                            background: C.pale,
+                            color: C.green,
+                            fontSize: 12,
+                            fontWeight: 600,
+                          }}
+                        >
+                          {index + 1}
+                        </div>
+
+                        <div style={{ minWidth: 0 }}>
+                          <p
+                            style={{
+                              margin: "0 0 3px",
+                              color: C.muted,
+                              fontSize: 10,
+                            }}
+                          >
+                            {type.label}
+                          </p>
+
+                          <p
+                            style={{
+                              margin: 0,
+                              color: C.text,
+                              fontSize: 12,
+                              fontWeight: 500,
+                              lineHeight: 1.5,
+                            }}
+                          >
+                            {meal?.meal_name_snapshot ||
+                              "Sin planificar"}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={() => navigate("nutrition")}
+                style={{
+                  width: "100%",
+                  minHeight: 44,
+                  marginTop: 21,
+                  background: C.pale,
+                  color: C.darkGreen,
+                  border: "none",
+                  borderRadius: 12,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  fontFamily: "inherit",
+                  cursor: "pointer",
+                }}
+              >
+                Ir a Nutrición
+              </button>
+            </section>
+
+            {/* ENTRENAMIENTO */}
             <section
               style={{
                 background: C.green,
                 color: C.white,
-                borderRadius: 22,
-                padding: 20,
-                marginBottom: 30,
+                borderRadius: 21,
+                padding: 19,
               }}
             >
               <div
@@ -318,217 +567,77 @@ export default function HomePage() {
                   display: "flex",
                   alignItems: "center",
                   gap: 10,
-                  marginBottom: 7,
+                  marginBottom: 8,
                 }}
               >
-                <CalendarDays
-                  size={20}
+                <Dumbbell
+                  size={23}
                   strokeWidth={1.7}
                 />
 
                 <h2
                   style={{
-                    fontSize: 17,
-                    fontWeight: 600,
                     margin: 0,
+                    fontSize: 16,
+                    fontWeight: 600,
                   }}
                 >
-                  Mi día de hoy
+                  Mi entrenamiento
                 </h2>
               </div>
 
               <p
                 style={{
+                  margin: "0 0 17px",
                   fontSize: 12,
-                  opacity: 0.85,
-                  textTransform: "capitalize",
-                  margin: "0 0 20px",
+                  lineHeight: 1.6,
+                  opacity: 0.9,
                 }}
               >
-                {dateLabel}
+                Registra tu sesión cuando entrenes.
+                Tú decides tus días de descanso.
               </p>
 
-              <div
+              <button
+                type="button"
+                onClick={() => navigate("training")}
                 style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-                  gap: 10,
-                }}
-              >
-                {[
-                  {
-                    id: "nutrition" as Section,
-                    title: "Mi menú",
-                    description: "Ver alimentación",
-                    icon: Salad,
-                  },
-                  {
-                    id: "training" as Section,
-                    title: "Mi entreno",
-                    description: "Registrar actividad",
-                    icon: Dumbbell,
-                  },
-                ].map((item) => {
-                  const Icon = item.icon;
-
-                  return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={() => navigate(item.id)}
-                      style={{
-                        display: "flex",
-                        flexDirection: "column",
-                        alignItems: "flex-start",
-                        gap: 9,
-                        minWidth: 0,
-                        padding: 15,
-                        borderRadius: 15,
-                        border:
-                          "1px solid rgba(255,255,255,0.18)",
-                        background:
-                          "rgba(255,255,255,0.13)",
-                        color: C.white,
-                        textAlign: "left",
-                        fontFamily: "inherit",
-                        cursor: "pointer",
-                      }}
-                    >
-                      <Icon
-                        size={23}
-                        strokeWidth={1.7}
-                      />
-
-                      <span
-                        style={{
-                          fontSize: 13,
-                          fontWeight: 600,
-                        }}
-                      >
-                        {item.title}
-                      </span>
-
-                      <span
-                        style={{
-                          fontSize: 10,
-                          opacity: 0.85,
-                          lineHeight: 1.5,
-                        }}
-                      >
-                        {item.description}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-            </section>
-
-            {/* EXPLORAR */}
-            <section>
-              <h2
-                style={{
-                  fontSize: 17,
+                  width: "100%",
+                  minHeight: 47,
+                  background: C.white,
+                  color: C.darkGreen,
+                  border: "none",
+                  borderRadius: 13,
+                  fontSize: 13,
                   fontWeight: 600,
-                  margin: "0 0 15px",
+                  fontFamily: "inherit",
+                  cursor: "pointer",
                 }}
               >
-                Explora tu espacio
-              </h2>
-
-              <div
-                style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-                  gap: 11,
-                }}
-              >
-                {sections.map((item) => {
-                  const Icon = item.icon;
-
-                  return (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={() => navigate(item.id)}
-                      style={{
-                        display: "flex",
-                        flexDirection: "column",
-                        alignItems: "flex-start",
-                        gap: 9,
-                        minWidth: 0,
-                        minHeight: 155,
-                        padding: 16,
-                        borderRadius: 19,
-                        border: `1px solid ${C.border}`,
-                        background: C.white,
-                        color: C.text,
-                        textAlign: "left",
-                        fontFamily: "inherit",
-                        cursor: "pointer",
-                      }}
-                    >
-                      <div
-                        style={{
-                          width: 41,
-                          height: 41,
-                          borderRadius: 12,
-                          background: C.pale,
-                          color: C.green,
-                          display: "grid",
-                          placeItems: "center",
-                          marginBottom: 3,
-                        }}
-                      >
-                        <Icon
-                          size={22}
-                          strokeWidth={1.7}
-                        />
-                      </div>
-
-                      <span
-                        style={{
-                          fontSize: 13,
-                          fontWeight: 600,
-                        }}
-                      >
-                        {item.title}
-                      </span>
-
-                      <span
-                        style={{
-                          fontSize: 10,
-                          color: C.muted,
-                          lineHeight: 1.5,
-                        }}
-                      >
-                        {item.description}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
+                + Registrar entrenamiento
+              </button>
             </section>
           </>
         ) : (
           <>
-            {/* PÁGINA INTERIOR */}
+            {/* SECCIONES INTERIORES */}
             <section style={{ marginBottom: 23 }}>
               <div
                 style={{
                   width: 53,
                   height: 53,
-                  borderRadius: 16,
-                  background: C.pale,
-                  color: C.green,
                   display: "grid",
                   placeItems: "center",
-                  marginBottom: 16,
+                  background: C.pale,
+                  color: C.green,
+                  borderRadius: 15,
+                  marginBottom: 15,
                 }}
               >
                 {current && (
                   <current.icon
                     size={26}
-                    strokeWidth={1.6}
+                    strokeWidth={1.7}
                   />
                 )}
               </div>
@@ -537,21 +646,11 @@ export default function HomePage() {
                 style={{
                   fontSize: 27,
                   fontWeight: 600,
-                  margin: "0 0 7px",
+                  margin: 0,
                 }}
               >
                 {current?.title}
               </h1>
-
-              <p
-                style={{
-                  fontSize: 13,
-                  color: C.muted,
-                  margin: 0,
-                }}
-              >
-                {current?.description}
-              </p>
             </section>
 
             <section
@@ -565,8 +664,7 @@ export default function HomePage() {
               <h2
                 style={{
                   fontSize: 15,
-                  fontWeight: 600,
-                  margin: "0 0 9px",
+                  margin: "0 0 8px",
                 }}
               >
                 Próximamente
@@ -574,42 +672,21 @@ export default function HomePage() {
 
               <p
                 style={{
+                  color: C.muted,
                   fontSize: 12,
                   lineHeight: 1.8,
-                  color: C.muted,
-                  margin: "0 0 16px",
+                  margin: 0,
                 }}
               >
-                Aquí podrás consultar y gestionar tus datos
-                de {current?.title.toLowerCase()}.
+                Aquí desarrollaremos las funciones de{" "}
+                {current?.title.toLowerCase()}.
               </p>
-
-              <button
-                type="button"
-                onClick={() => navigate("home")}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 7,
-                  padding: 0,
-                  background: "transparent",
-                  border: "none",
-                  color: C.green,
-                  fontSize: 12,
-                  fontWeight: 600,
-                  fontFamily: "inherit",
-                  cursor: "pointer",
-                }}
-              >
-                Volver al inicio
-                <ChevronRight size={16} />
-              </button>
             </section>
           </>
         )}
       </div>
 
-      {/* NAVEGACIÓN INFERIOR */}
+      {/* MENÚ INFERIOR */}
       <nav
         aria-label="Navegación principal"
         style={{
@@ -642,13 +719,17 @@ export default function HomePage() {
                 key={item.id}
                 type="button"
                 onClick={() => navigate(item.id)}
-                aria-current={selected ? "page" : undefined}
+                aria-current={
+                  selected ? "page" : undefined
+                }
                 style={{
                   minWidth: 0,
                   minHeight: 49,
                   border: "none",
                   background: "transparent",
-                  color: selected ? C.darkGreen : C.muted,
+                  color: selected
+                    ? C.darkGreen
+                    : C.muted,
                   display: "flex",
                   flexDirection: "column",
                   alignItems: "center",
