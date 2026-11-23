@@ -1,9 +1,17 @@
-import "./globals.css";
+
 import type { Metadata, Viewport } from "next";
+import { Poppins } from "next/font/google";
+import "./globals.css";
+
+const poppins = Poppins({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  display: "swap",
+});
 
 export const metadata: Metadata = {
-  title: "FORMA | Mi entrenamiento y nutrición",
-  description: "Mi aplicación personal de nutrición, entrenamiento y progreso.",
+  title: "FORMA",
+  description: "Mi espacio personal de nutrición, entrenamiento y progreso.",
   appleWebApp: {
     capable: true,
     title: "FORMA",
@@ -14,7 +22,7 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  viewportFit: "cover",
+  themeColor: "#7D8C82",
 };
 
 export default function RootLayout({
@@ -24,7 +32,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="es">
-      <body style={{ margin: 0 }}>{children}</body>
+      <body className={poppins.className}>
+        {children}
+      </body>
     </html>
   );
 }
+
