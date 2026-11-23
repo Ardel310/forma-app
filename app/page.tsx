@@ -11,7 +11,6 @@ import {
   ChartNoAxesColumnIncreasing,
   BookOpen,
   LogOut,
-  CalendarDays,
   ChevronRight,
   RefreshCw,
   type LucideIcon,
@@ -24,15 +23,6 @@ type Section =
   | "training"
   | "progress"
   | "library";
-
-type MealType =
-  | "breakfast"
-  | "morning_snack"
-  | "lunch"
-  | "lunch_dessert"
-  | "afternoon_snack"
-  | "dinner"
-  | "dinner_dessert";
 
 type PlannedMeal = {
   id: string;
@@ -58,10 +48,7 @@ const C = {
   white: "#FFFFFF",
 };
 
-const mealTypes: {
-  id: MealType;
-  label: string;
-}[] = [
+const mealTypes = [
   { id: "breakfast", label: "Desayuno" },
   { id: "morning_snack", label: "Media mañana" },
   { id: "lunch", label: "Almuerzo" },
@@ -104,7 +91,7 @@ const navigation: NavItem[] = [
   },
 ];
 
-function localDate() {
+function getLocalDate() {
   const now = new Date();
 
   const year = now.getFullYear();
@@ -114,7 +101,7 @@ function localDate() {
   return `${year}-${month}-${day}`;
 }
 
-function formattedDate() {
+function getDateLabel() {
   return new Intl.DateTimeFormat("es-ES", {
     weekday: "long",
     day: "numeric",
@@ -136,18 +123,27 @@ export default function HomePage() {
   const [loadingMeals, setLoadingMeals] = useState(true);
   const [mealError, setMealError] = useState("");
 
+  const [diagnostic, setDiagnostic] = useState(
+    "Esperando consulta..."
+  );
+
+  const [reloadKey, setReloadKey] = useState(0);
+
   useEffect(() => {
     let active = true;
     const supabase = createClient();
 
     async function initialize() {
-      const date = localDate();
+      const date = getLocalDate();
 
       setToday(date);
-      setTodayLabel(formattedDate());
+      setTodayLabel(getDateLabel());
+
+      console.log("FORMA - Fecha consultada:", date);
 
       try {
-        const { data, error } = await supabase.auth.getUser();
+        const { data, error } =
+          await supabase.auth.getUser();
 
         if (!active) return;
 
@@ -158,7 +154,9 @@ export default function HomePage() {
 
         setCheckingSession(false);
       } catch {
-        if (active) router.replace("/login");
+        if (active) {
+          router.replace("/login");
+        }
       }
     }
 
@@ -184,15 +182,28 @@ export default function HomePage() {
         .select("id, meal_type, meal_name_snapshot")
         .eq("meal_date", today);
 
+      console.log("FORMA - Fecha consultada:", today);
+      console.log("FORMA - Comidas recibidas:", data);
+      console.log("FORMA - Error:", error);
+
       if (!active) return;
 
-   if (error) {
-  console.error("Error Supabase:", error);
-  setMealError(
-    `Error: ${error.message} (${error.code || "sin código"})`
-  );
-  setMeals([]);
-}
+      if (error) {
+        setMeals([]);
+        setMealError(
+          `Error: ${error.message} (${error.code || "sin código"})`
+        );
+        setDiagnostic(
+          `Fecha: ${today} · Error: ${error.code || "desconocido"}`
+        );
+      } else {
+        const result = (data ?? []) as PlannedMeal[];
+
+        setMeals(result);
+        setDiagnostic(
+          `Fecha: ${today} · Registros recibidos: ${result.length}`
+        );
+      }
 
       setLoadingMeals(false);
     }
@@ -202,11 +213,14 @@ export default function HomePage() {
     return () => {
       active = false;
     };
-  }, [checkingSession, today]);
+  }, [checkingSession, today, reloadKey]);
 
   function navigate(destination: Section) {
     setSection(destination);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
   }
 
   async function logout() {
@@ -234,6 +248,7 @@ export default function HomePage() {
           placeItems: "center",
           background: C.bg,
           color: C.green,
+          fontFamily: "inherit",
         }}
       >
         Comprobando acceso a FORMA...
@@ -274,6 +289,7 @@ export default function HomePage() {
           <button
             type="button"
             onClick={() => navigate("home")}
+            aria-label="Ir al inicio"
             style={{
               display: "flex",
               alignItems: "center",
@@ -287,7 +303,7 @@ export default function HomePage() {
           >
             <Image
               src="/isotipo.png"
-              alt="FORMA"
+              alt="Logo FORMA"
               width={45}
               height={45}
               priority
@@ -323,7 +339,7 @@ export default function HomePage() {
               color: C.green,
               border: `1px solid ${C.border}`,
               borderRadius: 13,
-              cursor: "pointer",
+              cursor: loggingOut ? "wait" : "pointer",
             }}
           >
             <LogOut size={19} strokeWidth={1.7} />
@@ -369,7 +385,7 @@ export default function HomePage() {
               </p>
             </section>
 
-            {/* MENÚ DE HOY */}
+            {/* MENÚ */}
             <section
               style={{
                 background: C.white,
@@ -436,34 +452,16 @@ export default function HomePage() {
                   Cargando tu menú...
                 </p>
               ) : mealError ? (
-                <div>
-                  <p
-                    role="alert"
-                    style={{
-                      color: "#B45353",
-                      fontSize: 12,
-                    }}
-                  >
-                    {mealError}
-                  </p>
-
-                  <button
-                    type="button"
-                    onClick={() => window.location.reload()}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 6,
-                      background: "transparent",
-                      border: "none",
-                      color: C.green,
-                      cursor: "pointer",
-                    }}
-                  >
-                    <RefreshCw size={15} />
-                    Reintentar
-                  </button>
-                </div>
+                <p
+                  role="alert"
+                  style={{
+                    color: "#B45353",
+                    fontSize: 12,
+                    lineHeight: 1.6,
+                  }}
+                >
+                  {mealError}
+                </p>
               ) : (
                 <div
                   style={{
@@ -533,16 +531,75 @@ export default function HomePage() {
                 </div>
               )}
 
+              {/* DIAGNÓSTICO TEMPORAL */}
+              <div
+                style={{
+                  marginTop: 20,
+                  padding: 12,
+                  background: "#F4F5F2",
+                  border: `1px dashed ${C.border}`,
+                  borderRadius: 11,
+                }}
+              >
+                <p
+                  style={{
+                    margin: "0 0 7px",
+                    fontSize: 10,
+                    fontWeight: 600,
+                    color: C.darkGreen,
+                  }}
+                >
+                  Diagnóstico temporal
+                </p>
+
+                <p
+                  style={{
+                    margin: 0,
+                    fontSize: 11,
+                    color: C.muted,
+                    lineHeight: 1.6,
+                    overflowWrap: "anywhere",
+                  }}
+                >
+                  {diagnostic}
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setReloadKey((value) => value + 1)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 7,
+                  width: "100%",
+                  minHeight: 42,
+                  marginTop: 12,
+                  background: C.pale,
+                  color: C.darkGreen,
+                  border: "none",
+                  borderRadius: 12,
+                  fontSize: 12,
+                  fontWeight: 600,
+                  fontFamily: "inherit",
+                  cursor: "pointer",
+                }}
+              >
+                <RefreshCw size={15} />
+                Volver a consultar
+              </button>
+
               <button
                 type="button"
                 onClick={() => navigate("nutrition")}
                 style={{
                   width: "100%",
-                  minHeight: 44,
-                  marginTop: 21,
-                  background: C.pale,
+                  minHeight: 42,
+                  marginTop: 9,
+                  background: C.white,
                   color: C.darkGreen,
-                  border: "none",
+                  border: `1px solid ${C.border}`,
                   borderRadius: 12,
                   fontSize: 12,
                   fontWeight: 600,
@@ -621,7 +678,7 @@ export default function HomePage() {
           </>
         ) : (
           <>
-            {/* SECCIONES INTERIORES */}
+            {/* SECCIÓN INTERIOR */}
             <section style={{ marginBottom: 23 }}>
               <div
                 style={{
@@ -687,7 +744,7 @@ export default function HomePage() {
         )}
       </div>
 
-      {/* MENÚ INFERIOR */}
+      {/* NAVEGACIÓN INFERIOR */}
       <nav
         aria-label="Navegación principal"
         style={{
