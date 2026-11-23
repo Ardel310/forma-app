@@ -3,6 +3,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import {
   Salad,
   Dumbbell,
@@ -15,7 +16,12 @@ import {
 } from "lucide-react";
 import { createClient } from "../lib/supabase/client";
 
-type Section = "home" | "nutrition" | "training" | "progress" | "library";
+type Section =
+  | "home"
+  | "nutrition"
+  | "training"
+  | "progress"
+  | "library";
 
 type MenuItem = {
   id: Exclude<Section, "home">;
@@ -23,6 +29,11 @@ type MenuItem = {
   description: string;
   icon: LucideIcon;
 };
+
+const GREEN = "#7D8C82";
+const BG = "#F7F8F6";
+const TEXT = "#1E2925";
+const MUTED = "#7C8580";
 
 const menuItems: MenuItem[] = [
   {
@@ -75,9 +86,7 @@ export default function HomePage() {
 
         setCheckingSession(false);
       } catch {
-        if (active) {
-          router.replace("/login");
-        }
+        if (active) router.replace("/login");
       }
     }
 
@@ -95,8 +104,8 @@ export default function HomePage() {
     const { error } = await supabase.auth.signOut();
 
     if (error) {
+      alert("No se pudo cerrar sesión.");
       setLoggingOut(false);
-      alert("No se pudo cerrar la sesión. Inténtalo de nuevo.");
       return;
     }
 
@@ -112,8 +121,8 @@ export default function HomePage() {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          background: "#F7F8F6",
-          color: "#7D8C82",
+          background: BG,
+          color: GREEN,
           fontSize: 14,
         }}
       >
@@ -130,9 +139,10 @@ export default function HomePage() {
     <main
       style={{
         minHeight: "100dvh",
-        background: "#F7F8F6",
-        color: "#1E2925",
-        padding: "32px 20px 60px",
+        background: BG,
+        color: TEXT,
+        padding: "24px 20px 60px",
+        fontFamily: "inherit",
       }}
     >
       <div
@@ -149,23 +159,50 @@ export default function HomePage() {
             justifyContent: "space-between",
             alignItems: "center",
             gap: 16,
-            marginBottom: 28,
+            marginBottom: 34,
           }}
         >
-          <div
+          <button
+            type="button"
             onClick={() => setSection("home")}
+            aria-label="Ir al inicio de FORMA"
             style={{
-              color: "#7D8C82",
-              fontSize: 13,
-              fontWeight: 600,
-              letterSpacing: "0.24em",
+              display: "flex",
+              alignItems: "center",
+              gap: 12,
+              padding: 0,
+              background: "transparent",
+              border: "none",
               cursor: "pointer",
+              fontFamily: "inherit",
             }}
           >
-            FORMA
-          </div>
+            <Image
+              src="/forma-logo.png"
+              alt="Logo FORMA"
+              width={46}
+              height={46}
+              priority
+              style={{
+                borderRadius: 12,
+                objectFit: "contain",
+              }}
+            />
+
+            <span
+              style={{
+                color: GREEN,
+                fontSize: 15,
+                fontWeight: 600,
+                letterSpacing: "0.16em",
+              }}
+            >
+              FORMA
+            </span>
+          </button>
 
           <button
+            type="button"
             onClick={handleLogout}
             disabled={loggingOut}
             aria-label="Cerrar sesión"
@@ -174,28 +211,28 @@ export default function HomePage() {
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              width: 38,
-              height: 38,
+              width: 42,
+              height: 42,
               border: "1px solid #E1E6E1",
-              borderRadius: 12,
+              borderRadius: 13,
               background: "#FFFFFF",
-              color: "#7D8C82",
+              color: GREEN,
               cursor: loggingOut ? "wait" : "pointer",
             }}
           >
-            <LogOut size={18} strokeWidth={1.7} />
+            <LogOut size={19} strokeWidth={1.7} />
           </button>
         </header>
 
         {section === "home" ? (
           <>
-            {/* PRESENTACIÓN */}
-            <div style={{ marginBottom: 32 }}>
+            {/* BIENVENIDA */}
+            <div style={{ marginBottom: 36 }}>
               <h1
                 style={{
                   fontSize: "clamp(25px, 4vw, 34px)",
                   fontWeight: 600,
-                  letterSpacing: "-0.04em",
+                  letterSpacing: "-0.035em",
                   lineHeight: 1.3,
                   margin: "0 0 10px",
                 }}
@@ -205,7 +242,7 @@ export default function HomePage() {
 
               <p
                 style={{
-                  color: "#7C8580",
+                  color: MUTED,
                   fontSize: 14,
                   margin: 0,
                 }}
@@ -214,7 +251,6 @@ export default function HomePage() {
               </p>
             </div>
 
-            {/* TARJETAS */}
             <h2
               style={{
                 fontSize: 17,
@@ -225,6 +261,7 @@ export default function HomePage() {
               ¿Qué quieres hacer hoy?
             </h2>
 
+            {/* TARJETAS */}
             <div
               style={{
                 display: "grid",
@@ -239,6 +276,7 @@ export default function HomePage() {
                 return (
                   <button
                     key={item.id}
+                    type="button"
                     onClick={() => setSection(item.id)}
                     style={{
                       width: "100%",
@@ -253,8 +291,9 @@ export default function HomePage() {
                       textAlign: "left",
                       cursor: "pointer",
                       fontFamily: "inherit",
-                      color: "inherit",
-                      boxShadow: "0 2px 10px rgba(20,40,30,0.015)",
+                      color: TEXT,
+                      boxShadow:
+                        "0 2px 10px rgba(20,40,30,0.015)",
                     }}
                   >
                     <div
@@ -266,7 +305,7 @@ export default function HomePage() {
                         justifyContent: "center",
                         borderRadius: 13,
                         background: "#F0F3F0",
-                        color: "#7D8C82",
+                        color: GREEN,
                         marginBottom: 20,
                       }}
                     >
@@ -301,7 +340,7 @@ export default function HomePage() {
                     <span
                       style={{
                         marginTop: 7,
-                        color: "#7C8580",
+                        color: MUTED,
                         fontSize: 12,
                         lineHeight: 1.6,
                       }}
@@ -315,8 +354,9 @@ export default function HomePage() {
           </>
         ) : (
           <>
-            {/* NAVEGACIÓN INTERIOR */}
+            {/* VOLVER */}
             <button
+              type="button"
               onClick={() => setSection("home")}
               style={{
                 display: "inline-flex",
@@ -324,7 +364,7 @@ export default function HomePage() {
                 gap: 8,
                 border: "none",
                 background: "transparent",
-                color: "#7D8C82",
+                color: GREEN,
                 fontFamily: "inherit",
                 fontSize: 13,
                 fontWeight: 500,
@@ -337,6 +377,7 @@ export default function HomePage() {
               Volver al inicio
             </button>
 
+            {/* CABECERA DE SECCIÓN */}
             <div
               style={{
                 display: "flex",
@@ -351,7 +392,7 @@ export default function HomePage() {
                   height: 54,
                   borderRadius: 16,
                   background: "#EDF1ED",
-                  color: "#7D8C82",
+                  color: GREEN,
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
@@ -379,7 +420,7 @@ export default function HomePage() {
                 <p
                   style={{
                     fontSize: 13,
-                    color: "#7C8580",
+                    color: MUTED,
                     margin: "5px 0 0",
                   }}
                 >
@@ -410,7 +451,7 @@ export default function HomePage() {
               <p
                 style={{
                   fontSize: 13,
-                  color: "#7C8580",
+                  color: MUTED,
                   lineHeight: 1.8,
                   margin: 0,
                 }}
