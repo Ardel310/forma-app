@@ -186,12 +186,13 @@ export default function HomePage() {
 
       if (!active) return;
 
-      if (error) {
-        setMealError("No se pudo cargar el menú de hoy.");
-        setMeals([]);
-      } else {
-        setMeals((data ?? []) as PlannedMeal[]);
-      }
+   if (error) {
+  console.error("Error Supabase:", error);
+  setMealError(
+    `Error: ${error.message} (${error.code || "sin código"})`
+  );
+  setMeals([]);
+}
 
       setLoadingMeals(false);
     }
