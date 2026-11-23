@@ -1,7 +1,12 @@
 
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import {
@@ -13,12 +18,10 @@ import {
   LogOut,
   ChevronRight,
   ChevronLeft,
-  RefreshCw,
   ArrowLeft,
+  RefreshCw,
   CalendarDays,
   Check,
-  X,
-  Utensils,
   type LucideIcon,
 } from "lucide-react";
 import { createClient } from "../lib/supabase/client";
@@ -32,6 +35,7 @@ type Section =
 
 type PlannedMeal = {
   id: string;
+  user_id: string;
   meal_date: string;
   meal_type: string;
   nutrition_plan_id: string;
@@ -86,23 +90,37 @@ const mealTypes = [
 ];
 
 const navigation: NavItem[] = [
-  { id: "home", title: "Inicio", shortTitle: "Inicio", icon: House },
-  { id: "nutrition", title: "Nutrición", shortTitle: "Nutrición", icon: Salad },
-  { id: "training", title: "Entrenamiento", shortTitle: "Entreno", icon: Dumbbell },
+  {
+    id: "home",
+    title: "Inicio",
+    shortTitle: "Inicio",
+    icon: House,
+  },
+  {
+    id: "nutrition",
+    title: "Nutrición",
+    shortTitle: "Nutrición",
+    icon: Salad,
+  },
+  {
+    id: "training",
+    title: "Entrenamiento",
+    shortTitle: "Entreno",
+    icon: Dumbbell,
+  },
   {
     id: "progress",
     title: "Mi progreso",
     shortTitle: "Progreso",
     icon: ChartNoAxesColumnIncreasing,
   },
-  { id: "library", title: "Biblioteca", shortTitle: "Biblioteca", icon: BookOpen },
+  {
+    id: "library",
+    title: "Biblioteca",
+    shortTitle: "Biblioteca",
+    icon: BookOpen,
+  },
 ];
-
-const dateFormatter = new Intl.DateTimeFormat("es-ES", {
-  weekday: "long",
-  day: "numeric",
-  month: "long",
-});
 
 function localDate(date = new Date()) {
   const y = date.getFullYear();
@@ -112,21 +130,30 @@ function localDate(date = new Date()) {
 }
 
 function parseDate(value: string) {
-  const [year, month, day] = value.split("-").map(Number);
-  return new Date(year, month - 1, day);
+  const [y, m, d] = value.split("-").map(Number);
+  return new Date(y, m - 1, d);
 }
 
-function addDays(value: string, amount: number) {
+function addDays(value: string, days: number) {
   const date = parseDate(value);
-  date.setDate(date.getDate() + amount);
+  date.setDate(date.getDate() + days);
   return localDate(date);
 }
 
 function mondayOf(value: string) {
   const date = parseDate(value);
-  const day = date.getDay();
-  date.setDate(date.getDate() - ((day + 6) % 7));
+  date.setDate(
+    date.getDate() - ((date.getDay() + 6) % 7)
+  );
   return localDate(date);
+}
+
+function fullDate(value: string) {
+  return new Intl.DateTimeFormat("es-ES", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  }).format(parseDate(value));
 }
 
 function shortDate(value: string) {
@@ -136,7 +163,7 @@ function shortDate(value: string) {
   }).format(parseDate(value));
 }
 
-function weekdayName(value: string) {
+function weekday(value: string) {
   return new Intl.DateTimeFormat("es-ES", {
     weekday: "short",
   })
@@ -145,11 +172,10 @@ function weekdayName(value: string) {
 }
 
 function mealLabel(type: string) {
-  return mealTypes.find((item) => item.id === type)?.label ?? type;
-}
-
-function mealName(meal?: PlannedMeal) {
-  return meal?.meal_name_snapshot || "Sin planificar";
+  return (
+    mealTypes.find((item) => item.id === type)?.label ??
+    type
+  );
 }
 
 function normalizeIngredients(value: unknown): Ingredient[] {
@@ -159,29 +185,39 @@ function normalizeIngredients(value: unknown): Ingredient[] {
     if (!item || typeof item !== "object") return [];
 
     const row = item as Record<string, unknown>;
-    const name = row.ingredient ?? row.name ?? row.nombre;
+
+    const name =
+      row.ingredient ?? row.name ?? row.nombre;
+
+    const amount =
+      row.quantity ?? row.cantidad ?? row.amount;
+
+    const unit = row.unit ?? row.unidad;
+
+    if (typeof name !== "string" || !name.trim()) {
+      return [];
+    }
+
     const quantity =
-      row.quantity ?? row.cantidad ?? row.amount ?? null;
-    const unit = row.unit ?? row.unidad ?? null;
+      typeof amount === "number"
+        ? amount
+        : typeof amount === "string" &&
+            amount.trim() !== "" &&
+            Number.isFinite(Number(amount))
+          ? Number(amount)
+          : null;
 
-    if (typeof name !== "string") return [];
-
-    return [{
-      ingredient: name,
-      quantity:
-        typeof quantity === "number"
-          ? quantity
-          : typeof quantity === "string" &&
-              quantity.trim() !== "" &&
-              Number.isFinite(Number(quantity))
-            ? Number(quantity)
-            : null,
-      unit: typeof unit === "string" ? unit : null,
-    }];
+    return [
+      {
+        ingredient: name,
+        quantity,
+        unit: typeof unit === "string" ? unit : null,
+      },
+    ];
   });
 }
 
-function Button({
+function AppButton({
   children,
   onClick,
   secondary = false,
@@ -200,7 +236,7 @@ function Button({
       style={{
         width: "100%",
         minHeight: 46,
-        padding: "11px 14px",
+        padding: "12px 15px",
         background: secondary ? C.pale : C.green,
         color: secondary ? C.darkGreen : C.white,
         border: "none",
@@ -223,7 +259,8 @@ export default function HomePage() {
   const supabase = useMemo(() => createClient(), []);
 
   const [section, setSection] = useState<Section>("home");
-  const [checkingSession, setCheckingSession] = useState(true);
+  const [checkingSession, setCheckingSession] =
+    useState(true);
   const [loggingOut, setLoggingOut] = useState(false);
 
   const [today, setToday] = useState("");
@@ -234,15 +271,23 @@ export default function HomePage() {
   const [loadingMeals, setLoadingMeals] = useState(true);
   const [mealError, setMealError] = useState("");
 
-  const [selectedMeal, setSelectedMeal] = useState<PlannedMeal | null>(null);
-  const [options, setOptions] = useState<NutritionOption[]>([]);
-  const [loadingOptions, setLoadingOptions] = useState(false);
+  const [selectedMeal, setSelectedMeal] =
+    useState<PlannedMeal | null>(null);
+
+  const [options, setOptions] = useState<NutritionOption[]>(
+    []
+  );
+  const [loadingOptions, setLoadingOptions] =
+    useState(false);
+  const [changingOption, setChangingOption] =
+    useState(false);
+  const [savingOption, setSavingOption] =
+    useState(false);
   const [optionError, setOptionError] = useState("");
-  const [changingOption, setChangingOption] = useState(false);
-  const [savingOption, setSavingOption] = useState(false);
 
   const [refreshKey, setRefreshKey] = useState(0);
 
+  // SESIÓN
   useEffect(() => {
     let active = true;
 
@@ -253,7 +298,8 @@ export default function HomePage() {
       setSelectedDay(date);
       setWeekStart(mondayOf(date));
 
-      const { data, error } = await supabase.auth.getUser();
+      const { data, error } =
+        await supabase.auth.getUser();
 
       if (!active) return;
 
@@ -272,26 +318,29 @@ export default function HomePage() {
     };
   }, [router, supabase]);
 
+  // CARGAR COMIDAS DE LA SEMANA
   const loadMeals = useCallback(async () => {
-    if (!today || checkingSession) return;
+    if (!today || !weekStart || checkingSession) {
+      return;
+    }
 
     setLoadingMeals(true);
     setMealError("");
 
-    const first = weekStart || mondayOf(today);
-    const last = addDays(first, 6);
-
     const { data, error } = await supabase
       .from("weekly_meal_plans")
       .select(
-        "id, meal_date, meal_type, nutrition_plan_id, nutrition_meal_id, meal_name_snapshot, ingredients_snapshot, instructions_snapshot"
+        "id, user_id, meal_date, meal_type, nutrition_plan_id, nutrition_meal_id, meal_name_snapshot, ingredients_snapshot, instructions_snapshot"
       )
-      .gte("meal_date", first)
-      .lte("meal_date", last);
+      .gte("meal_date", weekStart)
+      .lte("meal_date", addDays(weekStart, 6))
+      .order("meal_date", { ascending: true });
 
     if (error) {
-      setMealError(`${error.message} (${error.code || "sin código"})`);
       setMeals([]);
+      setMealError(
+        `${error.message} (${error.code || "sin código"})`
+      );
     } else {
       setMeals((data ?? []) as PlannedMeal[]);
     }
@@ -307,11 +356,160 @@ export default function HomePage() {
     setSection(destination);
     setSelectedMeal(null);
     setChangingOption(false);
+    setOptionError("");
+
+    if (destination === "nutrition" && today) {
+      setSelectedDay(today);
+      setWeekStart(mondayOf(today));
+    }
+
     window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  // ABRIR FICHA DESDE HOME O NUTRICIÓN
+  function openMeal(meal: PlannedMeal) {
+    setSection("nutrition");
+    setSelectedDay(meal.meal_date);
+    setWeekStart(mondayOf(meal.meal_date));
+    setSelectedMeal(meal);
+
+    setChangingOption(false);
+    setOptions([]);
+    setOptionError("");
+
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function closeMeal() {
+    setSelectedMeal(null);
+    setChangingOption(false);
+    setOptionError("");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  // CONSULTAR OPCIONES DE LA MISMA COMIDA
+  async function showOptions() {
+    if (!selectedMeal) return;
+
+    setChangingOption(true);
+    setLoadingOptions(true);
+    setOptionError("");
+    setOptions([]);
+
+    const { data, error } = await supabase
+      .from("nutrition_meals")
+      .select(
+        "id, plan_id, meal_type, option_number, name, instructions"
+      )
+      .eq("plan_id", selectedMeal.nutrition_plan_id)
+      .eq("meal_type", selectedMeal.meal_type)
+      .order("option_number", { ascending: true });
+
+    if (error) {
+      setOptionError(
+        `${error.message} (${error.code || "sin código"})`
+      );
+    } else {
+      setOptions((data ?? []) as NutritionOption[]);
+    }
+
+    setLoadingOptions(false);
+  }
+
+  // GUARDAR OPCIÓN CON SU COPIA HISTÓRICA
+  async function saveOption(option: NutritionOption) {
+    if (!selectedMeal || savingOption) return;
+
+    if (option.id === selectedMeal.nutrition_meal_id) {
+      setChangingOption(false);
+      return;
+    }
+
+    setSavingOption(true);
+    setOptionError("");
+
+    try {
+      const { data: ingredientRows, error: ingredientsError } =
+        await supabase
+          .from("nutrition_ingredients")
+          .select("*")
+          .eq("meal_id", option.id);
+
+      if (ingredientsError) {
+        throw new Error(
+          `Ingredientes: ${ingredientsError.message}`
+        );
+      }
+
+      const rawRows = (ingredientRows ?? []) as Record<
+        string,
+        unknown
+      >[];
+
+      if (rawRows.length === 0) {
+        throw new Error(
+          "Esta opción no tiene ingredientes registrados. No se ha modificado la comida."
+        );
+      }
+
+      const ingredientsSnapshot =
+        normalizeIngredients(rawRows);
+
+      if (
+        ingredientsSnapshot.length !== rawRows.length ||
+        ingredientsSnapshot.some(
+          (ingredient) =>
+            ingredient.quantity === null ||
+            !ingredient.unit
+        )
+      ) {
+        throw new Error(
+          "No se han podido interpretar todas las cantidades de esta opción. No se ha guardado ningún cambio."
+        );
+      }
+
+      const { data: updated, error: updateError } =
+        await supabase
+          .from("weekly_meal_plans")
+          .update({
+            nutrition_meal_id: option.id,
+            meal_name_snapshot: option.name,
+            ingredients_snapshot: ingredientsSnapshot,
+            instructions_snapshot: option.instructions,
+          })
+          .eq("id", selectedMeal.id)
+          .eq("nutrition_plan_id", selectedMeal.nutrition_plan_id)
+          .select("id");
+
+      if (updateError) {
+        throw new Error(
+          `No se pudo guardar: ${updateError.message}`
+        );
+      }
+
+      if (!updated || updated.length !== 1) {
+        throw new Error(
+          "No se ha confirmado la actualización. Revisa los permisos de escritura."
+        );
+      }
+
+      setSelectedMeal(null);
+      setChangingOption(false);
+      setRefreshKey((value) => value + 1);
+    } catch (error) {
+      setOptionError(
+        error instanceof Error
+          ? error.message
+          : "Error desconocido al cambiar la comida."
+      );
+    } finally {
+      setSavingOption(false);
+    }
   }
 
   async function logout() {
     setLoggingOut(true);
+
     const { error } = await supabase.auth.signOut();
 
     if (error) {
@@ -324,103 +522,26 @@ export default function HomePage() {
     router.refresh();
   }
 
-  function openMeal(meal: PlannedMeal) {
-    setSelectedMeal(meal);
-    setChangingOption(false);
-    setOptions([]);
-    setOptionError("");
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  }
-
-  async function showOptions() {
-    if (!selectedMeal) return;
-
-    setChangingOption(true);
-    setLoadingOptions(true);
-    setOptionError("");
-
-    const { data, error } = await supabase
-      .from("nutrition_meals")
-      .select(
-        "id, plan_id, meal_type, option_number, name, instructions"
-      )
-      .eq("plan_id", selectedMeal.nutrition_plan_id)
-      .eq("meal_type", selectedMeal.meal_type)
-      .order("option_number", { ascending: true });
-
-    if (error) {
-      setOptionError(`${error.message} (${error.code || "sin código"})`);
-      setOptions([]);
-    } else {
-      setOptions((data ?? []) as NutritionOption[]);
-    }
-
-    setLoadingOptions(false);
-  }
-
-  async function saveOption(option: NutritionOption) {
-    if (!selectedMeal || savingOption) return;
-
-    setSavingOption(true);
-    setOptionError("");
-
-    /*
-      Primero recuperamos los ingredientes de la opción elegida
-      para guardar una copia histórica en weekly_meal_plans.
-    */
-    const { data: ingredientRows, error: ingredientError } =
-      await supabase
-        .from("nutrition_ingredients")
-        .select("*")
-        .eq("meal_id", option.id);
-
-    if (ingredientError) {
-      setOptionError(
-        `No se pudieron consultar los ingredientes: ${ingredientError.message}`
-      );
-      setSavingOption(false);
-      return;
-    }
-
-    const ingredientsSnapshot = (ingredientRows ?? []).map(
-      (row: Record<string, unknown>) => ({
-        ingredient: row.ingredient ?? row.name ?? row.nombre ?? "",
-        quantity: row.quantity ?? row.cantidad ?? null,
-        unit: row.unit ?? row.unidad ?? null,
-      })
-    );
-
-    const { error } = await supabase
-      .from("weekly_meal_plans")
-      .update({
-        nutrition_meal_id: option.id,
-        meal_name_snapshot: option.name,
-        ingredients_snapshot: ingredientsSnapshot,
-        instructions_snapshot: option.instructions,
-      })
-      .eq("id", selectedMeal.id);
-
-    if (error) {
-      setOptionError(`${error.message} (${error.code || "sin código"})`);
-      setSavingOption(false);
-      return;
-    }
-
-    setSelectedMeal(null);
-    setChangingOption(false);
-    setSavingOption(false);
-    setRefreshKey((value) => value + 1);
+  function changeWeek(days: number) {
+    const next = addDays(weekStart, days);
+    setWeekStart(next);
+    setSelectedDay(next);
   }
 
   const weekDays = useMemo(
     () =>
       weekStart
-        ? Array.from({ length: 7 }, (_, i) => addDays(weekStart, i))
+        ? Array.from(
+            { length: 7 },
+            (_, i) => addDays(weekStart, i)
+          )
         : [],
     [weekStart]
   );
 
-  const todayMeals = meals.filter((meal) => meal.meal_date === today);
+  const todayMeals = meals.filter(
+    (meal) => meal.meal_date === today
+  );
 
   const selectedDayMeals = meals.filter(
     (meal) => meal.meal_date === selectedDay
@@ -428,14 +549,14 @@ export default function HomePage() {
 
   function renderMealRows(
     items: PlannedMeal[],
-    interactive: boolean
+    interactive = true
   ) {
     return (
       <div
         style={{
           display: "flex",
           flexDirection: "column",
-          gap: 15,
+          gap: 16,
         }}
       >
         {mealTypes.map((type, index) => {
@@ -443,9 +564,29 @@ export default function HomePage() {
             (item) => item.meal_type === type.id
           );
 
-          const content = (
-            <>
-              <div
+          return (
+            <button
+              key={type.id}
+              type="button"
+              disabled={!meal || !interactive}
+              onClick={() => {
+                if (meal) openMeal(meal);
+              }}
+              style={{
+                width: "100%",
+                display: "flex",
+                alignItems: "center",
+                gap: 12,
+                padding: "3px 0",
+                background: "transparent",
+                border: "none",
+                textAlign: "left",
+                fontFamily: "inherit",
+                cursor:
+                  meal && interactive ? "pointer" : "default",
+              }}
+            >
+              <span
                 style={{
                   width: 33,
                   height: 33,
@@ -460,77 +601,42 @@ export default function HomePage() {
                 }}
               >
                 {index + 1}
-              </div>
+              </span>
 
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <p
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span
                   style={{
-                    margin: "0 0 3px",
+                    display: "block",
+                    marginBottom: 3,
                     color: C.muted,
                     fontSize: 10,
                   }}
                 >
                   {type.label}
-                </p>
+                </span>
 
-                <p
+                <span
                   style={{
-                    margin: 0,
+                    display: "block",
                     color: C.text,
                     fontSize: 12,
                     fontWeight: 500,
                     lineHeight: 1.5,
                   }}
                 >
-                  {mealName(meal)}
-                </p>
-              </div>
+                  {meal?.meal_name_snapshot ||
+                    "Sin planificar"}
+                </span>
+              </span>
 
-              {interactive && meal && (
+              {meal && interactive && (
                 <ChevronRight
                   size={16}
                   color={C.green}
                   strokeWidth={1.6}
                 />
               )}
-            </>
-          );
-
-          if (interactive && meal) {
-            return (
-              <button
-                type="button"
-                key={type.id}
-                onClick={() => openMeal(meal)}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 12,
-                  width: "100%",
-                  padding: "3px 0",
-                  border: "none",
-                  background: "transparent",
-                  textAlign: "left",
-                  fontFamily: "inherit",
-                  cursor: "pointer",
-                }}
-              >
-                {content}
-              </button>
-            );
-          }
-
-          return (
-            <div
-              key={type.id}
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 12,
-              }}
-            >
-              {content}
-            </div>
+            </button>
           );
         })}
       </div>
@@ -553,7 +659,15 @@ export default function HomePage() {
     );
   }
 
-  const current = navigation.find((item) => item.id === section);
+  const current = navigation.find(
+    (item) => item.id === section
+  );
+
+  const ingredients = selectedMeal
+    ? normalizeIngredients(
+        selectedMeal.ingredients_snapshot
+      )
+    : [];
 
   return (
     <main
@@ -607,6 +721,7 @@ export default function HomePage() {
                 objectFit: "contain",
               }}
             />
+
             <span
               style={{
                 color: C.green,
@@ -654,7 +769,7 @@ export default function HomePage() {
                   margin: "0 0 7px",
                 }}
               >
-                {today && dateFormatter.format(parseDate(today))}
+                {today && fullDate(today)}
               </p>
 
               <h1
@@ -713,9 +828,14 @@ export default function HomePage() {
                     fontWeight: 600,
                   }}
                 >
-                  <Salad size={22} color={C.green} strokeWidth={1.7} />
+                  <Salad
+                    size={22}
+                    color={C.green}
+                    strokeWidth={1.7}
+                  />
                   Mi menú de hoy
                 </span>
+
                 <ChevronRight size={19} color={C.green} />
               </button>
 
@@ -732,20 +852,23 @@ export default function HomePage() {
                   Cargando tu menú...
                 </p>
               ) : mealError ? (
-                <p role="alert" style={{ color: C.danger, fontSize: 12 }}>
+                <p
+                  role="alert"
+                  style={{ color: C.danger, fontSize: 12 }}
+                >
                   {mealError}
                 </p>
               ) : (
-                renderMealRows(todayMeals, true)
+                renderMealRows(todayMeals)
               )}
 
               <div style={{ marginTop: 20 }}>
-                <Button
+                <AppButton
                   secondary
                   onClick={() => navigate("nutrition")}
                 >
                   Ver mi planificación semanal
-                </Button>
+                </AppButton>
               </div>
             </section>
 
@@ -766,7 +889,14 @@ export default function HomePage() {
                 }}
               >
                 <Dumbbell size={23} strokeWidth={1.7} />
-                <h2 style={{ margin: 0, fontSize: 16, fontWeight: 600 }}>
+
+                <h2
+                  style={{
+                    margin: 0,
+                    fontSize: 16,
+                    fontWeight: 600,
+                  }}
+                >
                   Mi entrenamiento
                 </h2>
               </div>
@@ -810,12 +940,10 @@ export default function HomePage() {
           <>
             {selectedMeal ? (
               <>
+                {/* FICHA */}
                 <button
                   type="button"
-                  onClick={() => {
-                    setSelectedMeal(null);
-                    setChangingOption(false);
-                  }}
+                  onClick={closeMeal}
                   style={{
                     display: "flex",
                     alignItems: "center",
@@ -842,6 +970,8 @@ export default function HomePage() {
                   }}
                 >
                   {mealLabel(selectedMeal.meal_type)}
+                  {" · "}
+                  {shortDate(selectedMeal.meal_date)}
                 </p>
 
                 <h1
@@ -852,7 +982,8 @@ export default function HomePage() {
                     fontWeight: 600,
                   }}
                 >
-                  {mealName(selectedMeal)}
+                  {selectedMeal.meal_name_snapshot ||
+                    "Sin planificar"}
                 </h1>
 
                 <section
@@ -864,20 +995,26 @@ export default function HomePage() {
                     marginBottom: 15,
                   }}
                 >
-                  <h2 style={{ fontSize: 15, margin: "0 0 15px" }}>
+                  <h2
+                    style={{
+                      fontSize: 15,
+                      margin: "0 0 15px",
+                    }}
+                  >
                     Ingredientes
                   </h2>
 
-                  {normalizeIngredients(
-                    selectedMeal.ingredients_snapshot
-                  ).length === 0 ? (
-                    <p style={{ color: C.muted, fontSize: 12 }}>
-                      No hay ingredientes detallados para esta comida.
+                  {ingredients.length === 0 ? (
+                    <p
+                      style={{
+                        color: C.muted,
+                        fontSize: 12,
+                      }}
+                    >
+                      No hay ingredientes detallados.
                     </p>
                   ) : (
-                    normalizeIngredients(
-                      selectedMeal.ingredients_snapshot
-                    ).map((ingredient, index) => (
+                    ingredients.map((ingredient, index) => (
                       <div
                         key={index}
                         style={{
@@ -890,6 +1027,7 @@ export default function HomePage() {
                         }}
                       >
                         <span>{ingredient.ingredient}</span>
+
                         <span
                           style={{
                             color: C.green,
@@ -916,9 +1054,15 @@ export default function HomePage() {
                       marginBottom: 15,
                     }}
                   >
-                    <h2 style={{ fontSize: 15, margin: "0 0 12px" }}>
+                    <h2
+                      style={{
+                        fontSize: 15,
+                        margin: "0 0 12px",
+                      }}
+                    >
                       Preparación
                     </h2>
+
                     <p
                       style={{
                         color: C.muted,
@@ -934,9 +1078,9 @@ export default function HomePage() {
                 )}
 
                 {!changingOption ? (
-                  <Button onClick={showOptions}>
+                  <AppButton onClick={showOptions}>
                     Cambiar esta comida
-                  </Button>
+                  </AppButton>
                 ) : (
                   <section
                     style={{
@@ -946,12 +1090,22 @@ export default function HomePage() {
                       padding: 18,
                     }}
                   >
-                    <h2 style={{ fontSize: 15, margin: "0 0 14px" }}>
+                    <h2
+                      style={{
+                        fontSize: 15,
+                        margin: "0 0 14px",
+                      }}
+                    >
                       Elige otra opción
                     </h2>
 
                     {loadingOptions ? (
-                      <p style={{ fontSize: 12, color: C.muted }}>
+                      <p
+                        style={{
+                          fontSize: 12,
+                          color: C.muted,
+                        }}
+                      >
                         Cargando opciones...
                       </p>
                     ) : (
@@ -962,45 +1116,62 @@ export default function HomePage() {
                           gap: 9,
                         }}
                       >
-                        {options.map((option) => (
-                          <button
-                            key={option.id}
-                            type="button"
-                            disabled={savingOption}
-                            onClick={() => saveOption(option)}
-                            style={{
-                              display: "flex",
-                              alignItems: "center",
-                              justifyContent: "space-between",
-                              gap: 10,
-                              textAlign: "left",
-                              padding: "13px 12px",
-                              background:
-                                option.id === selectedMeal.nutrition_meal_id
+                        {options.map((option) => {
+                          const selected =
+                            option.id ===
+                            selectedMeal.nutrition_meal_id;
+
+                          return (
+                            <button
+                              key={option.id}
+                              type="button"
+                              disabled={savingOption}
+                              onClick={() => saveOption(option)}
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "space-between",
+                                gap: 10,
+                                textAlign: "left",
+                                padding: "13px 12px",
+                                background: selected
                                   ? C.pale
                                   : C.white,
-                              border: `1px solid ${C.border}`,
-                              borderRadius: 12,
-                              fontFamily: "inherit",
-                              color: C.text,
-                              fontSize: 12,
-                              cursor: "pointer",
-                            }}
-                          >
-                            <span>
-                              {option.option_number}. {option.name}
-                            </span>
-                            {option.id === selectedMeal.nutrition_meal_id && (
-                              <Check size={17} color={C.green} />
-                            )}
-                          </button>
-                        ))}
+                                border: `1px solid ${C.border}`,
+                                borderRadius: 12,
+                                fontFamily: "inherit",
+                                color: C.text,
+                                fontSize: 12,
+                                cursor: "pointer",
+                                opacity: savingOption ? 0.6 : 1,
+                              }}
+                            >
+                              <span>
+                                {option.option_number}.{" "}
+                                {option.name}
+                              </span>
 
-                        {options.length === 0 && !optionError && (
-                          <p style={{ fontSize: 12, color: C.muted }}>
-                            No hay opciones disponibles para esta comida.
-                          </p>
-                        )}
+                              {selected && (
+                                <Check
+                                  size={17}
+                                  color={C.green}
+                                />
+                              )}
+                            </button>
+                          );
+                        })}
+
+                        {options.length === 0 &&
+                          !optionError && (
+                            <p
+                              style={{
+                                fontSize: 12,
+                                color: C.muted,
+                              }}
+                            >
+                              No hay opciones disponibles.
+                            </p>
+                          )}
                       </div>
                     )}
 
@@ -1011,6 +1182,7 @@ export default function HomePage() {
                           color: C.danger,
                           fontSize: 11,
                           lineHeight: 1.6,
+                          marginTop: 14,
                         }}
                       >
                         {optionError}
@@ -1018,18 +1190,23 @@ export default function HomePage() {
                     )}
 
                     <div style={{ marginTop: 15 }}>
-                      <Button
+                      <AppButton
                         secondary
-                        onClick={() => setChangingOption(false)}
+                        onClick={() => {
+                          setChangingOption(false);
+                          setOptionError("");
+                        }}
+                        disabled={savingOption}
                       >
                         Cancelar
-                      </Button>
+                      </AppButton>
                     </div>
                   </section>
                 )}
               </>
             ) : (
               <>
+                {/* PLANIFICACIÓN SEMANAL */}
                 <section style={{ marginBottom: 22 }}>
                   <p
                     style={{
@@ -1042,6 +1219,7 @@ export default function HomePage() {
                   >
                     TU PLANIFICACIÓN
                   </p>
+
                   <h1
                     style={{
                       fontSize: 28,
@@ -1051,6 +1229,7 @@ export default function HomePage() {
                   >
                     Nutrición
                   </h1>
+
                   <p
                     style={{
                       fontSize: 12,
@@ -1062,7 +1241,6 @@ export default function HomePage() {
                   </p>
                 </section>
 
-                {/* SELECTOR DE SEMANA */}
                 <section
                   style={{
                     background: C.white,
@@ -1082,9 +1260,7 @@ export default function HomePage() {
                   >
                     <button
                       type="button"
-                      onClick={() =>
-                        setWeekStart((value) => addDays(value, -7))
-                      }
+                      onClick={() => changeWeek(-7)}
                       aria-label="Semana anterior"
                       style={{
                         border: "none",
@@ -1108,7 +1284,11 @@ export default function HomePage() {
                         fontWeight: 600,
                       }}
                     >
-                      <CalendarDays size={17} color={C.green} />
+                      <CalendarDays
+                        size={17}
+                        color={C.green}
+                      />
+
                       {weekStart &&
                         `${shortDate(weekStart)} - ${shortDate(
                           addDays(weekStart, 6)
@@ -1117,9 +1297,7 @@ export default function HomePage() {
 
                     <button
                       type="button"
-                      onClick={() =>
-                        setWeekStart((value) => addDays(value, 7))
-                      }
+                      onClick={() => changeWeek(7)}
                       aria-label="Semana siguiente"
                       style={{
                         border: "none",
@@ -1155,8 +1333,12 @@ export default function HomePage() {
                             minHeight: 54,
                             border: "none",
                             borderRadius: 11,
-                            background: active ? C.green : C.pale,
-                            color: active ? C.white : C.darkGreen,
+                            background: active
+                              ? C.green
+                              : C.pale,
+                            color: active
+                              ? C.white
+                              : C.darkGreen,
                             fontFamily: "inherit",
                             cursor: "pointer",
                             display: "flex",
@@ -1167,8 +1349,9 @@ export default function HomePage() {
                           }}
                         >
                           <span style={{ fontSize: 10 }}>
-                            {weekdayName(day)}
+                            {weekday(day)}
                           </span>
+
                           <span
                             style={{
                               fontSize: 13,
@@ -1183,7 +1366,6 @@ export default function HomePage() {
                   </div>
                 </section>
 
-                {/* COMIDAS DEL DÍA */}
                 <section
                   style={{
                     background: C.white,
@@ -1207,8 +1389,7 @@ export default function HomePage() {
                         fontWeight: 600,
                       }}
                     >
-                      {selectedDay &&
-                        dateFormatter.format(parseDate(selectedDay))}
+                      {selectedDay && fullDate(selectedDay)}
                     </h2>
 
                     <button
@@ -1229,18 +1410,26 @@ export default function HomePage() {
                   </div>
 
                   {loadingMeals ? (
-                    <p style={{ fontSize: 12, color: C.muted }}>
+                    <p
+                      style={{
+                        fontSize: 12,
+                        color: C.muted,
+                      }}
+                    >
                       Cargando comidas...
                     </p>
                   ) : mealError ? (
                     <p
                       role="alert"
-                      style={{ fontSize: 12, color: C.danger }}
+                      style={{
+                        fontSize: 12,
+                        color: C.danger,
+                      }}
                     >
                       {mealError}
                     </p>
                   ) : (
-                    renderMealRows(selectedDayMeals, true)
+                    renderMealRows(selectedDayMeals)
                   )}
                 </section>
               </>
@@ -1248,66 +1437,76 @@ export default function HomePage() {
           </>
         )}
 
-        {/* RESTO DE SECCIONES */}
-        {section !== "home" && section !== "nutrition" && (
-          <>
-            <section style={{ marginBottom: 23 }}>
-              <div
-                style={{
-                  width: 53,
-                  height: 53,
-                  display: "grid",
-                  placeItems: "center",
-                  background: C.pale,
-                  color: C.green,
-                  borderRadius: 15,
-                  marginBottom: 15,
-                }}
-              >
-                {current && (
-                  <current.icon size={26} strokeWidth={1.7} />
-                )}
-              </div>
+        {/* OTRAS SECCIONES */}
+        {section !== "home" &&
+          section !== "nutrition" && (
+            <>
+              <section style={{ marginBottom: 23 }}>
+                <div
+                  style={{
+                    width: 53,
+                    height: 53,
+                    display: "grid",
+                    placeItems: "center",
+                    background: C.pale,
+                    color: C.green,
+                    borderRadius: 15,
+                    marginBottom: 15,
+                  }}
+                >
+                  {current && (
+                    <current.icon
+                      size={26}
+                      strokeWidth={1.7}
+                    />
+                  )}
+                </div>
 
-              <h1
-                style={{
-                  fontSize: 27,
-                  fontWeight: 600,
-                  margin: 0,
-                }}
-              >
-                {current?.title}
-              </h1>
-            </section>
+                <h1
+                  style={{
+                    fontSize: 27,
+                    fontWeight: 600,
+                    margin: 0,
+                  }}
+                >
+                  {current?.title}
+                </h1>
+              </section>
 
-            <section
-              style={{
-                background: C.white,
-                border: `1px solid ${C.border}`,
-                borderRadius: 20,
-                padding: 22,
-              }}
-            >
-              <h2 style={{ fontSize: 15, margin: "0 0 8px" }}>
-                Próximamente
-              </h2>
-              <p
+              <section
                 style={{
-                  color: C.muted,
-                  fontSize: 12,
-                  lineHeight: 1.8,
-                  margin: 0,
+                  background: C.white,
+                  border: `1px solid ${C.border}`,
+                  borderRadius: 20,
+                  padding: 22,
                 }}
               >
-                Aquí desarrollaremos las funciones de{" "}
-                {current?.title.toLowerCase()}.
-              </p>
-            </section>
-          </>
-        )}
+                <h2
+                  style={{
+                    fontSize: 15,
+                    margin: "0 0 8px",
+                  }}
+                >
+                  Próximamente
+                </h2>
+
+                <p
+                  style={{
+                    color: C.muted,
+                    fontSize: 12,
+                    lineHeight: 1.8,
+                    margin: 0,
+                  }}
+                >
+                  Aquí desarrollaremos las funciones de{" "}
+                  {current?.title.toLowerCase()}.
+                </p>
+              </section>
+            </>
+          )}
       </div>
 
-      {/* MENÚ INFERIOR */}
+      {/* NAVEGACIÓN INFERIOR */}
       <nav
         aria-label="Navegación principal"
         style={{
@@ -1341,13 +1540,17 @@ export default function HomePage() {
                 key={item.id}
                 type="button"
                 onClick={() => navigate(item.id)}
-                aria-current={selected ? "page" : undefined}
+                aria-current={
+                  selected ? "page" : undefined
+                }
                 style={{
                   minWidth: 0,
                   minHeight: 49,
                   border: "none",
                   background: "transparent",
-                  color: selected ? C.darkGreen : C.muted,
+                  color: selected
+                    ? C.darkGreen
+                    : C.muted,
                   display: "flex",
                   flexDirection: "column",
                   alignItems: "center",
@@ -1360,8 +1563,11 @@ export default function HomePage() {
               >
                 <Icon
                   size={21}
-                  strokeWidth={selected ? 2.2 : 1.6}
+                  strokeWidth={
+                    selected ? 2.2 : 1.6
+                  }
                 />
+
                 <span
                   style={{
                     fontSize: 9,
