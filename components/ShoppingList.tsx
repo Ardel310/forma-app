@@ -296,6 +296,15 @@ export default function ShoppingList({
       }));
   }, [items]);
 
+  const pendingGroups = grouped.map(group => ({
+    ...group,
+    items: group.items.filter(item => !checked[itemKey(item)]),
+  })).filter(group => group.items.length > 0);
+
+  const purchasedItems = grouped.flatMap(group =>
+    group.items.filter(item => checked[itemKey(item)])
+  );
+
   const completed = items.filter(
     (item) => checked[itemKey(item)]
   ).length;
@@ -694,15 +703,12 @@ export default function ShoppingList({
       {/* CATEGORÍAS */}
 
       {!loading && !error &&
-        grouped.map((group) => {
+        pendingGroups.map((group) => {
           const CategoryIcon =
             categoryIcons[
               group.category as keyof typeof categoryIcons
             ] || Package;
 
-          const groupCompleted = group.items.filter(
-            (item) => checked[itemKey(item)]
-          ).length;
 
           return (
             <section
@@ -757,7 +763,7 @@ export default function ShoppingList({
                     whiteSpace: "nowrap",
                   }}
                 >
-                  {groupCompleted}/{group.items.length}
+                  {group.items.length} pendientes
                 </span>
               </div>
 
@@ -846,6 +852,98 @@ export default function ShoppingList({
             </section>
           );
         })}
+
+      {!loading && !error && purchasedItems.length > 0 && (
+        <section style={{ ...cardStyle, background: C.pale }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10,
+            paddingBottom: 13, borderBottom: `1px solid ${C.border}` }}>
+            <Check size={20} color={C.green} />
+            <h2 style={{ flex: 1, fontSize: 14, fontWeight: 600, color: C.dark, margin: 0 }}>
+              Comprados ({purchasedItems.length})
+            </h2>
+          </div>
+              {purchasedItems.map((item, index) => {
+                const done = !!checked[itemKey(item)];
+
+                return (
+                  <button
+                    key={itemKey(item)}
+                    type="button"
+                    role="checkbox"
+                    aria-checked={done}
+                    disabled={!checklistReady}
+                    onClick={() => toggleItem(item)}
+                    style={{
+                      width: "100%",
+                      minHeight: 52,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 11,
+                      padding: "12px 0",
+                      background: "transparent",
+                      border: "none",
+                      borderBottom:
+                        index < purchasedItems.length - 1
+                          ? `1px solid ${C.border}`
+                          : "none",
+                      fontFamily: "inherit",
+                      cursor: "pointer",
+                      textAlign: "left",
+                      opacity: done ? 0.5 : 1,
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: 24,
+                        height: 24,
+                        flexShrink: 0,
+                        display: "grid",
+                        placeItems: "center",
+                        borderRadius: 7,
+                        border: `1px solid ${C.green}`,
+                        background: done
+                          ? C.green
+                          : C.white,
+                        color: C.white,
+                      }}
+                    >
+                      {done && <Check size={16} />}
+                    </span>
+
+                    <span
+                      style={{
+                        flex: 1,
+                        minWidth: 0,
+                        fontSize: 13,
+                        fontWeight: 500,
+                        color: C.dark,
+                        overflowWrap: "anywhere",
+                        textDecoration: done
+                          ? "line-through"
+                          : "none",
+                      }}
+                    >
+                      {item.ingredient}
+                    </span>
+
+                    <span
+                      style={{
+                        color: C.muted,
+                        fontSize: 13,
+                        fontWeight: 600,
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {formatQuantity(
+                        item.total_quantity,
+                        item.unit
+                      )}
+                    </span>
+                  </button>
+                );
+              })}
+        </section>
+      )}
 
       {/* NOTA FINAL */}
 
