@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { createClient } from "../lib/supabase/client";
 import ShoppingList from "../components/ShoppingList";
+import NutritionPlans from "../components/NutritionPlans";
 
 type Section =
   | "home"
@@ -1487,9 +1488,13 @@ export default function HomePage() {
           </>
         )}
 
+        {/* BIBLIOTECA */}
+        {section === "library" && <NutritionPlans />}
+
         {/* OTRAS SECCIONES */}
         {section !== "home" &&
-          section !== "nutrition" && (
+          section !== "nutrition" &&
+          section !== "library" && (
             <>
               <section style={{ marginBottom: 23 }}>
                 <div
