@@ -4,7 +4,7 @@ import { FileText, Upload, Eye, Download, Trash2 } from "lucide-react";
 import { createClient } from "../lib/supabase/client";
 
 type Doc = { id:string; file_name:string; file_path:string; file_size:number|null; document_type:string; created_at:string };
-const categories = {nutrition_plan:"Plan nutricional",body_measurements:"Mediciones corporales",supplements:"Suplementación",recommendations:"Recomendaciones",other:"Otros documentos"};
+const categories = {nutrition_plan:"Plan nutricional",body_composition:"Análisis de composición corporal",body_measurements:"Mediciones corporales",supplements:"Suplementación",recommendations:"Recomendaciones",other:"Otros documentos"};
 const bucket = "nutrition-documents";
 const green = "#7D8C82";
 const button: React.CSSProperties = {display:"inline-flex",alignItems:"center",justifyContent:"center",gap:8,border:0,borderRadius:12,padding:10,background:"#EEF2EE",color:"#687A6D",fontFamily:"inherit",fontSize:12,cursor:"pointer",minHeight:40};
