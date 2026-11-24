@@ -1,4 +1,3 @@
-
 "use client";
 
 import {
@@ -27,6 +26,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { createClient } from "../lib/supabase/client";
+import ShoppingList from "../components/ShoppingList";
 
 type Section =
   | "home"
@@ -297,7 +297,6 @@ export default function HomePage() {
 
   const [refreshKey, setRefreshKey] = useState(0);
   const [showShopping, setShowShopping] = useState(false);
-  const [checkedItems, setCheckedItems] = useState<string[]>([]);
   const [conversions, setConversions] = useState<Conversion[]>([]);
   const [conversionError, setConversionError] = useState("");
   const [loadingConversions, setLoadingConversions] = useState(false);
@@ -319,27 +318,6 @@ export default function HomePage() {
     void loadConversions();
     return () => { active = false; };
   }, [checkingSession, supabase, refreshKey]);
-
-  const shoppingItems = useMemo(() => {
-    const totals = new Map<string, { key: string; name: string; unit: string; quantity: number }>();
-    for (const meal of meals) {
-      if (meal.meal_date < weekStart || meal.meal_date > addDays(weekStart, 6)) continue;
-      for (const item of normalizeIngredients(meal.ingredients_snapshot)) {
-        if (item.quantity === null || !Number.isFinite(item.quantity) || !item.unit) continue;
-        let unit = item.unit.trim().toLowerCase();
-        let quantity = item.quantity;
-        if (unit === "kg") { unit = "g"; quantity *= 1000; }
-        if (unit === "l") { unit = "ml"; quantity *= 1000; }
-        const key = ingredientKey(item.ingredient) + "|" + unit;
-        const previous = totals.get(key);
-        if (previous) previous.quantity += quantity;
-        else totals.set(key, { key, name: item.ingredient, unit, quantity });
-      }
-    }
-    return Array.from(totals.values()).sort((a,b) => a.name.localeCompare(b.name, "es"));
-  }, [meals, weekStart]);
-
-  useEffect(() => { setCheckedItems([]); }, [weekStart, meals]);
 
   // SESIÓN
   useEffect(() => {
@@ -1282,25 +1260,13 @@ export default function HomePage() {
               <>
                 {/* LISTA DE LA COMPRA */}
                 {showShopping ? (
-                  <>
-                    <AppButton secondary onClick={() => setShowShopping(false)}>← Volver a la planificación</AppButton>
-                    <h1 style={{fontSize:25,margin:"20px 0 6px"}}>Lista de la compra</h1>
-                    <p style={{fontSize:12,color:C.muted}}>{weekStart && `${shortDate(weekStart)} - ${shortDate(addDays(weekStart,6))}`}</p>
-                    <section style={{background:C.white,border:`1px solid ${C.border}`,borderRadius:20,padding:18}}>
-                      {loadingMeals ? <p>Cargando lista...</p> : mealError ? <p role="alert" style={{color:C.danger}}>{mealError}</p> : shoppingItems.length === 0 ? <p style={{fontSize:12}}>No hay ingredientes planificados esta semana.</p> : <>
-                        <p style={{fontSize:12,color:C.muted}}>{checkedItems.length} de {shoppingItems.length} productos marcados · cantidades del plan en crudo</p>
-                        {shoppingItems.map(item => {
-                          const checked = checkedItems.includes(item.key);
-                          return <label key={item.key} style={{display:"flex",alignItems:"center",gap:10,padding:"13px 0",borderBottom:`1px solid ${C.border}`,fontSize:12,cursor:"pointer"}}>
-                            <input type="checkbox" checked={checked} onChange={() => setCheckedItems(prev => checked ? prev.filter(k => k !== item.key) : [...prev,item.key])} style={{accentColor:C.darkGreen,width:18,height:18,flexShrink:0}} />
-                            <span style={{flex:1,textDecoration:checked?"line-through":"none",opacity:checked?0.6:1}}>{item.name}</span>
-                            <strong style={{color:C.darkGreen,whiteSpace:"nowrap"}}>{formatAmount(item.quantity)} {item.unit}</strong>
-                          </label>;
-                        })}
-                        <div style={{marginTop:16}}><AppButton secondary onClick={() => setCheckedItems([])}>Desmarcar todo</AppButton></div>
-                      </>}
-                    </section>
-                  </>
+                  <ShoppingList
+                    initialWeek={weekStart}
+                    onBack={() => {
+                      setShowShopping(false);
+                      window.scrollTo({ top: 0, behavior: "smooth" });
+                    }}
+                  />
                 ) : (<>
                 {/* PLANIFICACIÓN SEMANAL */}
                 <section style={{ marginBottom: 22 }}>
