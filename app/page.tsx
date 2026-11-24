@@ -22,6 +22,8 @@ import {
   RefreshCw,
   CalendarDays,
   Check,
+  ShoppingCart,
+  Scale,
   type LucideIcon,
 } from "lucide-react";
 import { createClient } from "../lib/supabase/client";
@@ -59,6 +61,14 @@ type Ingredient = {
   quantity: number | null;
   unit: string | null;
 };
+
+type Conversion = {
+  ingredient_name: string;
+  cooking_method: string;
+  conversion_factor: number;
+};
+const ingredientKey = (name: string) => name.trim().toLocaleLowerCase("es");
+const formatAmount = (n: number) => new Intl.NumberFormat("es-ES", { maximumFractionDigits: 2 }).format(n);
 
 type NavItem = {
   id: Section;
@@ -286,6 +296,50 @@ export default function HomePage() {
   const [optionError, setOptionError] = useState("");
 
   const [refreshKey, setRefreshKey] = useState(0);
+  const [showShopping, setShowShopping] = useState(false);
+  const [checkedItems, setCheckedItems] = useState<string[]>([]);
+  const [conversions, setConversions] = useState<Conversion[]>([]);
+  const [conversionError, setConversionError] = useState("");
+  const [loadingConversions, setLoadingConversions] = useState(false);
+
+  useEffect(() => {
+    if (checkingSession) return;
+    let active = true;
+    setLoadingConversions(true);
+    setConversionError("");
+    async function loadConversions() {
+      const { data, error } = await supabase.from("cooking_conversions")
+        .select("ingredient_name,cooking_method,conversion_factor")
+        .order("cooking_method");
+      if (!active) return;
+      if (error) setConversionError(error.message);
+      else setConversions((data ?? []) as Conversion[]);
+      setLoadingConversions(false);
+    }
+    void loadConversions();
+    return () => { active = false; };
+  }, [checkingSession, supabase, refreshKey]);
+
+  const shoppingItems = useMemo(() => {
+    const totals = new Map<string, { key: string; name: string; unit: string; quantity: number }>();
+    for (const meal of meals) {
+      if (meal.meal_date < weekStart || meal.meal_date > addDays(weekStart, 6)) continue;
+      for (const item of normalizeIngredients(meal.ingredients_snapshot)) {
+        if (item.quantity === null || !Number.isFinite(item.quantity) || !item.unit) continue;
+        let unit = item.unit.trim().toLowerCase();
+        let quantity = item.quantity;
+        if (unit === "kg") { unit = "g"; quantity *= 1000; }
+        if (unit === "l") { unit = "ml"; quantity *= 1000; }
+        const key = ingredientKey(item.ingredient) + "|" + unit;
+        const previous = totals.get(key);
+        if (previous) previous.quantity += quantity;
+        else totals.set(key, { key, name: item.ingredient, unit, quantity });
+      }
+    }
+    return Array.from(totals.values()).sort((a,b) => a.name.localeCompare(b.name, "es"));
+  }, [meals, weekStart]);
+
+  useEffect(() => { setCheckedItems([]); }, [weekStart, meals]);
 
   // SESIÓN
   useEffect(() => {
@@ -354,6 +408,8 @@ export default function HomePage() {
 
   function navigate(destination: Section) {
     setSection(destination);
+    setShowShopping(false);
+    if (destination === "home" && today) setWeekStart(mondayOf(today));
     setSelectedMeal(null);
     setChangingOption(false);
     setOptionError("");
@@ -369,6 +425,7 @@ export default function HomePage() {
   // ABRIR FICHA DESDE HOME O NUTRICIÓN
   function openMeal(meal: PlannedMeal) {
     setSection("nutrition");
+    setShowShopping(false);
     setSelectedDay(meal.meal_date);
     setWeekStart(mondayOf(meal.meal_date));
     setSelectedMeal(meal);
@@ -1077,6 +1134,23 @@ export default function HomePage() {
                   </section>
                 )}
 
+                {(loadingConversions || conversionError || ingredients.some(i => i.quantity !== null && i.unit?.trim().toLowerCase() === "g" && conversions.some(c => ingredientKey(c.ingredient_name) === ingredientKey(i.ingredient)))) && (
+                  <section style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 20, padding: 19, marginBottom: 15 }}>
+                    <h2 style={{ display: "flex", alignItems: "center", gap: 9, fontSize: 15, margin: "0 0 12px" }}><Scale size={19} color={C.green} /> Equivalencias de cocción</h2>
+                    {loadingConversions ? <p style={{fontSize: 12}}>Cargando equivalencias...</p> : conversionError ? <p role="alert" style={{color:C.danger,fontSize:12}}>{conversionError}</p> : ingredients.flatMap((item, index) => {
+                      if (item.quantity === null || item.unit?.trim().toLowerCase() !== "g") return [];
+                      const quantity = item.quantity;
+                      return conversions.filter(c => ingredientKey(c.ingredient_name) === ingredientKey(item.ingredient)).map(c => (
+                        <div key={`${index}-${c.cooking_method}`} style={{padding:"12px 0",borderBottom:`1px solid ${C.border}`,fontSize:12}}>
+                          <strong>{item.ingredient}</strong>
+                          <div style={{color:C.muted,fontSize:11,margin:"4px 0"}}>{c.cooking_method}</div>
+                          <div style={{display:"flex",justifyContent:"space-between",gap:8}}><span>{formatAmount(quantity)} g crudo</span><strong style={{color:C.darkGreen}}>≈ {formatAmount(Math.round(quantity * Number(c.conversion_factor)))} g cocinado</strong></div>
+                        </div>
+                      ));
+                    })}
+                    <p style={{fontSize:11,color:C.muted,lineHeight:1.6,marginBottom:0}}>Valores orientativos. El peso real depende de la cocción. Las cantidades prescritas siguen siendo en crudo.</p>
+                  </section>
+                )}
                 {!changingOption ? (
                   <AppButton onClick={showOptions}>
                     Cambiar esta comida
@@ -1206,6 +1280,28 @@ export default function HomePage() {
               </>
             ) : (
               <>
+                {/* LISTA DE LA COMPRA */}
+                {showShopping ? (
+                  <>
+                    <AppButton secondary onClick={() => setShowShopping(false)}>← Volver a la planificación</AppButton>
+                    <h1 style={{fontSize:25,margin:"20px 0 6px"}}>Lista de la compra</h1>
+                    <p style={{fontSize:12,color:C.muted}}>{weekStart && `${shortDate(weekStart)} - ${shortDate(addDays(weekStart,6))}`}</p>
+                    <section style={{background:C.white,border:`1px solid ${C.border}`,borderRadius:20,padding:18}}>
+                      {loadingMeals ? <p>Cargando lista...</p> : mealError ? <p role="alert" style={{color:C.danger}}>{mealError}</p> : shoppingItems.length === 0 ? <p style={{fontSize:12}}>No hay ingredientes planificados esta semana.</p> : <>
+                        <p style={{fontSize:12,color:C.muted}}>{checkedItems.length} de {shoppingItems.length} productos marcados · cantidades del plan en crudo</p>
+                        {shoppingItems.map(item => {
+                          const checked = checkedItems.includes(item.key);
+                          return <label key={item.key} style={{display:"flex",alignItems:"center",gap:10,padding:"13px 0",borderBottom:`1px solid ${C.border}`,fontSize:12,cursor:"pointer"}}>
+                            <input type="checkbox" checked={checked} onChange={() => setCheckedItems(prev => checked ? prev.filter(k => k !== item.key) : [...prev,item.key])} style={{accentColor:C.darkGreen,width:18,height:18,flexShrink:0}} />
+                            <span style={{flex:1,textDecoration:checked?"line-through":"none",opacity:checked?0.6:1}}>{item.name}</span>
+                            <strong style={{color:C.darkGreen,whiteSpace:"nowrap"}}>{formatAmount(item.quantity)} {item.unit}</strong>
+                          </label>;
+                        })}
+                        <div style={{marginTop:16}}><AppButton secondary onClick={() => setCheckedItems([])}>Desmarcar todo</AppButton></div>
+                      </>}
+                    </section>
+                  </>
+                ) : (<>
                 {/* PLANIFICACIÓN SEMANAL */}
                 <section style={{ marginBottom: 22 }}>
                   <p
@@ -1432,6 +1528,12 @@ export default function HomePage() {
                     renderMealRows(selectedDayMeals)
                   )}
                 </section>
+                <div style={{marginTop:16}}>
+                  <AppButton onClick={() => { setShowShopping(true); window.scrollTo({top:0,behavior:"smooth"}); }} disabled={loadingMeals || !!mealError}>
+                    <span style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8}}><ShoppingCart size={18}/> Lista de la compra semanal</span>
+                  </AppButton>
+                </div>
+                </>)}
               </>
             )}
           </>
