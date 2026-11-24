@@ -760,16 +760,36 @@ export default function HomePage() {
                 {today && fullDate(today)}
               </p>
 
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 7 }}>
               <h1
                 style={{
                   fontSize: 29,
                   fontWeight: 600,
                   letterSpacing: "-0.04em",
-                  margin: "0 0 7px",
+                  margin: 0,
                 }}
               >
                 Mi día de hoy
               </h1>
+                <button
+                  type="button"
+                  aria-label="Lista de la compra"
+                  title="Lista de la compra"
+                  onClick={() => {
+                    navigate("nutrition");
+                    setShowShopping(true);
+                  }}
+                  disabled={!today || !weekStart}
+                  style={{
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    width: 44, height: 44, flexShrink: 0,
+                    border: `1px solid ${C.border}`, borderRadius: 14,
+                    background: C.white, color: C.green, cursor: "pointer",
+                  }}
+                >
+                  <ShoppingCart size={22} strokeWidth={1.8} />
+                </button>
+              </div>
 
               <p
                 style={{
