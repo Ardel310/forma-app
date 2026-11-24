@@ -11,18 +11,28 @@ const poppins = Poppins({
 
 export const metadata: Metadata = {
   title: "FORMA",
-  description: "Mi espacio personal de nutrición, entrenamiento y progreso.",
+  applicationName: "FORMA",
+  description:
+    "Mi espacio personal de nutrición, entrenamiento y progreso.",
+
+  manifest: "/manifest.webmanifest",
+
   appleWebApp: {
     capable: true,
     title: "FORMA",
     statusBarStyle: "default",
+  },
+
+  formatDetection: {
+    telephone: false,
   },
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#7D8C82",
+  viewportFit: "cover",
+  themeColor: "#F7F8F6",
 };
 
 export default function RootLayout({
@@ -38,4 +48,3 @@ export default function RootLayout({
     </html>
   );
 }
-
