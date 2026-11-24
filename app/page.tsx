@@ -46,6 +46,10 @@ type PlannedMeal = {
   meal_name_snapshot: string | null;
   ingredients_snapshot: unknown;
   instructions_snapshot: string | null;
+  original_ingredients_snapshot?: unknown;
+  ingredient_substitutions?: unknown;
+  cooking_overrides?: unknown;
+  cooking_conversions_snapshot?: unknown;
 };
 
 type NutritionOption = {
@@ -58,6 +62,7 @@ type NutritionOption = {
 };
 
 type Ingredient = {
+  index: number;
   ingredient: string;
   quantity: number | null;
   unit: string | null;
@@ -192,7 +197,7 @@ function mealLabel(type: string) {
 function normalizeIngredients(value: unknown): Ingredient[] {
   if (!Array.isArray(value)) return [];
 
-  return value.flatMap((item) => {
+  return value.flatMap((item, index) => {
     if (!item || typeof item !== "object") return [];
 
     const row = item as Record<string, unknown>;
@@ -220,6 +225,7 @@ function normalizeIngredients(value: unknown): Ingredient[] {
 
     return [
       {
+        index,
         ingredient: name,
         quantity,
         unit: typeof unit === "string" ? unit : null,
@@ -304,23 +310,70 @@ export default function HomePage() {
   const [conversionError, setConversionError] = useState("");
   const [loadingConversions, setLoadingConversions] = useState(false);
 
+  const [alternatives, setAlternatives] = useState<{id:string;original_food:string;original_quantity:number;alternative_food:string;alternative_quantity:number}[]>([]);
+  const [editableMeal, setEditableMeal] = useState(false);
+  const [detailError, setDetailError] = useState("");
+  const [busyDetail, setBusyDetail] = useState(false);
+  const [editWeight, setEditWeight] = useState<{index:number;method:string;weight:string;scope:string}|null>(null);
+  const mealId = selectedMeal?.id;
+  const planId = selectedMeal?.nutrition_plan_id;
+  const recipeId = selectedMeal?.nutrition_meal_id;
+  const mealDate = selectedMeal?.meal_date;
+  const historical = selectedMeal?.cooking_conversions_snapshot;
   useEffect(() => {
-    if (checkingSession) return;
     let active = true;
+    setConversions([]); setAlternatives([]); setEditableMeal(false); setDetailError(""); setEditWeight(null); setConversionError("");
+    if (!mealId || !planId || checkingSession) { setLoadingConversions(false); return; }
     setLoadingConversions(true);
-    setConversionError("");
-    async function loadConversions() {
-      const { data, error } = await supabase.from("cooking_conversions")
-        .select("ingredient_name,cooking_method,conversion_factor")
-        .order("cooking_method");
-      if (!active) return;
-      if (error) setConversionError(error.message);
-      else setConversions((data ?? []) as Conversion[]);
-      setLoadingConversions(false);
+    async function loadDetails() {
+      try {
+        const past = !!mealDate && mealDate < today;
+        const [p,c,e] = await Promise.all([
+          supabase.from("nutrition_plans").select("status").eq("id",planId!).single(),
+          supabase.from("cooking_conversions").select("ingredient_name,cooking_method,conversion_factor").eq("plan_id",planId!),
+          supabase.from("food_equivalences").select("id,original_food,original_quantity,alternative_food,alternative_quantity").eq("plan_id",planId!).eq("meal_id",recipeId ?? "00000000-0000-0000-0000-000000000000")
+        ]);
+        if (!active) return;
+        if (p.error) throw p.error;
+        if (c.error) throw c.error;
+        if (e.error) throw e.error;
+        setConversions(past && Array.isArray(historical) ? historical as Conversion[] : (c.data ?? []) as Conversion[]);
+        setEditableMeal(!past && p.data.status === "active");
+        if (!past && p.data.status === "active") setAlternatives(e.data ?? []);
+      } catch(e) { if(active) setConversionError((e as {message?:string}).message ?? "Error al cargar detalles"); }
+      finally { if(active) setLoadingConversions(false); }
     }
-    void loadConversions();
-    return () => { active = false; };
-  }, [checkingSession, supabase, refreshKey]);
+    void loadDetails(); return () => {active=false;};
+  }, [checkingSession,supabase,mealId,planId,recipeId,mealDate,today,historical,refreshKey]);
+
+  async function refreshDetail(id:string) {
+    const {data,error}=await supabase.from("weekly_meal_plans").select("*").eq("id",id).single();
+    if(error) throw error;
+    setSelectedMeal(old=>old?.id===id?data as PlannedMeal:old);
+    setRefreshKey(v=>v+1);
+  }
+  async function substitute(index:number, equivalence:string|null) {
+    if(!selectedMeal || !editableMeal || busyDetail) return;
+    const id=selectedMeal.id; setBusyDetail(true); setDetailError("");
+    try { const {error}=await supabase.rpc("substitute_planned_ingredient",{p_planned_meal_id:id,p_ingredient_index:index,p_equivalence_id:equivalence}); if(error) throw error; await refreshDetail(id); }
+    catch(e){setDetailError((e as {message?:string}).message ?? "No se pudo sustituir");} finally{setBusyDetail(false);}
+  }
+  async function saveWeight(restore=false) {
+    if(!selectedMeal || !editableMeal || !editWeight || busyDetail) return;
+    const id=selectedMeal.id; const w=Number(editWeight.weight);
+    const item=normalizeIngredients(selectedMeal.ingredients_snapshot).find(i=>i.index===editWeight.index);
+    if(!item || !item.quantity || (!restore && (!Number.isFinite(w)||w<=0))) {setDetailError("Introduce un peso válido");return;}
+    setBusyDetail(true);setDetailError("");
+    try {
+      if(!restore && editWeight.scope==="plan") {
+        if(!window.confirm("¿Actualizar el factor general del plan?")) return;
+        const {error}=await supabase.from("cooking_conversions").update({conversion_factor:w/item.quantity}).eq("plan_id",selectedMeal.nutrition_plan_id).eq("ingredient_name",item.ingredient).eq("cooking_method",editWeight.method).select("id").single();
+        if(error) throw error;
+      }
+      const {error}=await supabase.rpc("save_cooking_override",{p_planned_meal_id:id,p_ingredient_index:editWeight.index,p_cooking_method:editWeight.method,p_cooked_weight:restore||editWeight.scope==="plan"?null:w});
+      if(error) throw error; setEditWeight(null); await refreshDetail(id);
+    } catch(e){setDetailError((e as {message?:string}).message ?? "No se pudo guardar el peso");} finally{setBusyDetail(false);}
+  }
 
   // SESIÓN
   useEffect(() => {
@@ -365,7 +418,7 @@ export default function HomePage() {
     const { data, error } = await supabase
       .from("weekly_meal_plans")
       .select(
-        "id, user_id, meal_date, meal_type, nutrition_plan_id, nutrition_meal_id, meal_name_snapshot, ingredients_snapshot, instructions_snapshot"
+        "id, user_id, meal_date, meal_type, nutrition_plan_id, nutrition_meal_id, meal_name_snapshot, ingredients_snapshot, instructions_snapshot, original_ingredients_snapshot, ingredient_substitutions, cooking_overrides, cooking_conversions_snapshot"
       )
       .gte("meal_date", weekStart)
       .lte("meal_date", addDays(weekStart, 6))
@@ -463,6 +516,7 @@ export default function HomePage() {
 
   async function saveOption(option: NutritionOption) {
     if (!selectedMeal || savingOption) return;
+    if (selectedMeal.id && ((Array.isArray(selectedMeal.ingredient_substitutions) && selectedMeal.ingredient_substitutions.length) || (Array.isArray(selectedMeal.cooking_overrides) && selectedMeal.cooking_overrides.length)) && !window.confirm("Cambiar la comida eliminará sus ajustes individuales. ¿Continuar?")) return;
     setSavingOption(true);
     setOptionError("");
     try {
@@ -1025,34 +1079,19 @@ export default function HomePage() {
                       No hay ingredientes detallados.
                     </p>
                   ) : (
-                    ingredients.map((ingredient, index) => (
-                      <div
-                        key={index}
-                        style={{
-                          display: "flex",
-                          justifyContent: "space-between",
-                          gap: 15,
-                          padding: "10px 0",
-                          borderBottom: `1px solid ${C.border}`,
-                          fontSize: 12,
-                        }}
-                      >
-                        <span>{ingredient.ingredient}</span>
-
-                        <span
-                          style={{
-                            color: C.green,
-                            fontWeight: 600,
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          {ingredient.quantity ?? ""}
-                          {" "}
-                          {ingredient.unit ?? ""}
-                        </span>
-                      </div>
-                    ))
+                    ingredients.map((ingredient) => {
+                      const original=normalizeIngredients(selectedMeal.original_ingredients_snapshot ?? selectedMeal.ingredients_snapshot).find(i=>i.index===ingredient.index);
+                      const changed=Array.isArray(selectedMeal.ingredient_substitutions) && selectedMeal.ingredient_substitutions.some(x=>x.ingredient_index===ingredient.index);
+                      const choices=alternatives.filter(x=>original && ingredientKey(x.original_food)===ingredientKey(original.ingredient));
+                      return <div key={ingredient.index} style={{padding:"12px 0",borderBottom:`1px solid ${C.border}`,fontSize:12}}>
+                        <div style={{display:"flex",justifyContent:"space-between",gap:12}}><strong>{ingredient.ingredient}</strong><strong style={{color:C.green}}>{ingredient.quantity} {ingredient.unit}</strong></div>
+                        {changed && <p style={{color:C.muted,fontSize:11}}>Original: {original?.ingredient} · {original?.quantity} {original?.unit}</p>}
+                        {editableMeal && changed && <button disabled={busyDetail} onClick={()=>void substitute(ingredient.index,null)} style={{border:0,background:C.pale,color:C.darkGreen,padding:8,borderRadius:8,fontFamily:"inherit"}}>Restaurar original</button>}
+                        {editableMeal && original?.unit?.trim().toLowerCase()==="g" && choices.length>0 && <div style={{background:C.pale,padding:10,borderRadius:10,marginTop:8}}><div style={{color:C.muted,fontSize:10,marginBottom:6}}>ALTERNATIVAS</div>{choices.map(x=><button key={x.id} disabled={busyDetail} onClick={()=>void substitute(ingredient.index,x.id)} style={{display:"flex",justifyContent:"space-between",width:"100%",border:0,background:"transparent",color:C.darkGreen,padding:"8px 0",fontFamily:"inherit",textAlign:"left",gap:8}}><span>{x.alternative_food} · {formatAmount(Number(original.quantity)*Number(x.alternative_quantity)/Number(x.original_quantity))} g</span><span>Sustituir</span></button>)}</div>}
+                      </div>;
+                    })
                   )}
+                  {detailError && <p role="alert" style={{color:C.danger,fontSize:12}}>{detailError}</p>}
                 </section>
 
                 {selectedMeal.instructions_snapshot && (
@@ -1083,30 +1122,33 @@ export default function HomePage() {
                         margin: 0,
                       }}
                     >
+                      {Array.isArray(selectedMeal.ingredient_substitutions) && selectedMeal.ingredient_substitutions.length>0 && <span style={{display:"block",marginBottom:8}}>Preparación original: adapta las instrucciones a los alimentos sustituidos.</span>}
                       {selectedMeal.instructions_snapshot}
                     </p>
                   </section>
                 )}
 
-                {(loadingConversions || conversionError || ingredients.some(i => i.quantity !== null && i.unit?.trim().toLowerCase() === "g" && conversions.some(c => ingredientKey(c.ingredient_name) === ingredientKey(i.ingredient)))) && (
-                  <section style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 20, padding: 19, marginBottom: 15 }}>
-                    <h2 style={{ display: "flex", alignItems: "center", gap: 9, fontSize: 15, margin: "0 0 12px" }}><Scale size={19} color={C.green} /> Equivalencias de cocción</h2>
-                    {loadingConversions ? <p style={{fontSize: 12}}>Cargando equivalencias...</p> : conversionError ? <p role="alert" style={{color:C.danger,fontSize:12}}>{conversionError}</p> : ingredients.flatMap((item, index) => {
-                      if (item.quantity === null || item.unit?.trim().toLowerCase() !== "g") return [];
-                      const quantity = item.quantity;
-                      return conversions.filter(c => ingredientKey(c.ingredient_name) === ingredientKey(item.ingredient)).map(c => (
-                        <div key={`${index}-${c.cooking_method}`} style={{padding:"12px 0",borderBottom:`1px solid ${C.border}`,fontSize:12}}>
-                          <strong>{item.ingredient}</strong>
-                          <div style={{color:C.muted,fontSize:11,margin:"4px 0"}}>{c.cooking_method}</div>
-                          <div style={{display:"flex",justifyContent:"space-between",gap:8}}><span>{formatAmount(quantity)} g crudo</span><strong style={{color:C.darkGreen}}>≈ {formatAmount(Math.round(quantity * Number(c.conversion_factor)))} g cocinado</strong></div>
-                        </div>
-                      ));
-                    })}
-                    <p style={{fontSize:11,color:C.muted,lineHeight:1.6,marginBottom:0}}>Valores orientativos. El peso real depende de la cocción. Las cantidades prescritas siguen siendo en crudo.</p>
-                  </section>
-                )}
+                <section style={{background:C.white,border:`1px solid ${C.border}`,borderRadius:20,padding:19,marginBottom:15}}>
+                  <h2 style={{display:"flex",alignItems:"center",gap:9,fontSize:15,margin:"0 0 12px"}}><Scale size={19} color={C.green}/> Conversión crudo/cocinado</h2>
+                  {loadingConversions ? <p>Cargando conversiones...</p> : conversionError ? <p role="alert" style={{color:C.danger}}>{conversionError}</p> : ingredients.flatMap(item=>{
+                    if(item.quantity===null || item.unit?.trim().toLowerCase()!=="g") return [];
+                    const overrides=Array.isArray(selectedMeal.cooking_overrides)?selectedMeal.cooking_overrides.filter(o=>o.ingredient_index===item.index):[];
+                    const matches=conversions.filter(c=>ingredientKey(c.ingredient_name)===ingredientKey(item.ingredient));
+                    const methods=[...new Set([...matches.map(c=>c.cooking_method),...overrides.map(o=>String(o.cooking_method))])];
+                    return methods.map(method=>{
+                      const c=matches.find(c=>c.cooking_method===method); const o=overrides.find(o=>o.cooking_method===method);
+                      const weight=o?Number(o.cooked_weight):Math.round(Number(item.quantity)*Number(c?.conversion_factor));
+                      const editing=editWeight?.index===item.index && editWeight.method===method;
+                      return <div key={`${item.index}-${method}`} style={{padding:"12px 0",borderBottom:`1px solid ${C.border}`,fontSize:12}}><strong>{item.ingredient}</strong><div style={{color:C.muted,fontSize:11,margin:"4px 0"}}>{method}{o?" · Ajuste individual":""}</div><div style={{display:"flex",justifyContent:"space-between",gap:8}}><span>{item.quantity} g crudo</span><strong style={{color:C.darkGreen}}>{o?"":"≈ "}{formatAmount(weight)} g cocinado</strong></div>
+                      {editableMeal && !editing && <button disabled={busyDetail} onClick={()=>setEditWeight({index:item.index,method,weight:String(weight),scope:"meal"})} style={{border:0,background:C.pale,color:C.darkGreen,padding:8,borderRadius:8,marginTop:8,fontFamily:"inherit"}}>Editar peso</button>}
+                      {editableMeal && editing && editWeight && <div style={{background:C.pale,padding:12,borderRadius:10,marginTop:8,display:"grid",gap:8}}><label>Peso cocinado (g)<input type="number" min="0.01" step="any" value={editWeight.weight} onChange={e=>setEditWeight({...editWeight,weight:e.target.value})} style={{width:"100%",padding:8,boxSizing:"border-box"}}/></label><label><input type="radio" checked={editWeight.scope==="meal"} onChange={()=>setEditWeight({...editWeight,scope:"meal"})}/> Solo esta comida</label>{c && <label><input type="radio" checked={editWeight.scope==="plan"} onChange={()=>setEditWeight({...editWeight,scope:"plan"})}/> Actualizar conversión del plan</label>}<AppButton disabled={busyDetail} onClick={()=>void saveWeight()}>Guardar ajuste</AppButton>{o && <AppButton secondary disabled={busyDetail} onClick={()=>void saveWeight(true)}>Restaurar estimación</AppButton>}<AppButton secondary disabled={busyDetail} onClick={()=>setEditWeight(null)}>Cancelar</AppButton></div>}
+                      </div>;
+                    });
+                  })}
+                  <p style={{fontSize:11,color:C.muted,lineHeight:1.6,marginBottom:0}}>Los pesos prescritos siguen siendo en crudo. {selectedMeal.meal_date<today && !Array.isArray(selectedMeal.cooking_conversions_snapshot)?"Estimaciones con factores disponibles; todavía no hay copia histórica.":"Los valores automáticos son orientativos."}</p>
+                </section>
                 </>)}
-                {!changingOption ? (
+                {selectedMeal.meal_date < today ? <p style={{fontSize:12,color:C.muted}}>Comida histórica · Solo consulta</p> : !changingOption ? (
                   <AppButton onClick={() => void showOptions()}>
                     {selectedMeal.id ? "Cambiar esta comida" : "Seleccionar comida"}
                   </AppButton>
