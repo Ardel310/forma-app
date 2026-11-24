@@ -444,6 +444,7 @@ export default function HomePage() {
       const { data, error } = await supabase.from("nutrition_meals")
         .select("id, plan_id, meal_type, option_number, name, instructions")
         .eq("plan_id", plans[0].id).eq("meal_type", target.meal_type)
+        .eq("is_active", true)
         .order("option_number");
       if (error) throw error;
       setOptions((data ?? []) as NutritionOption[]);
