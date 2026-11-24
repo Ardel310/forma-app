@@ -314,7 +314,6 @@ export default function HomePage() {
   const [editableMeal, setEditableMeal] = useState(false);
   const [detailError, setDetailError] = useState("");
   const [busyDetail, setBusyDetail] = useState(false);
-  const [editWeight, setEditWeight] = useState<{index:number;method:string;weight:string;scope:string}|null>(null);
   const mealId = selectedMeal?.id;
   const planId = selectedMeal?.nutrition_plan_id;
   const recipeId = selectedMeal?.nutrition_meal_id;
@@ -322,7 +321,7 @@ export default function HomePage() {
   const historical = selectedMeal?.cooking_conversions_snapshot;
   useEffect(() => {
     let active = true;
-    setConversions([]); setAlternatives([]); setEditableMeal(false); setDetailError(""); setEditWeight(null); setConversionError("");
+    setConversions([]); setAlternatives([]); setEditableMeal(false); setDetailError(""); setConversionError("");
     if (!mealId || !planId || checkingSession) { setLoadingConversions(false); return; }
     setLoadingConversions(true);
     async function loadDetails() {
@@ -358,23 +357,6 @@ export default function HomePage() {
     try { const {error}=await supabase.rpc("substitute_planned_ingredient",{p_planned_meal_id:id,p_ingredient_index:index,p_equivalence_id:equivalence}); if(error) throw error; await refreshDetail(id); }
     catch(e){setDetailError((e as {message?:string}).message ?? "No se pudo sustituir");} finally{setBusyDetail(false);}
   }
-  async function saveWeight(restore=false) {
-    if(!selectedMeal || !editableMeal || !editWeight || busyDetail) return;
-    const id=selectedMeal.id; const w=Number(editWeight.weight);
-    const item=normalizeIngredients(selectedMeal.ingredients_snapshot).find(i=>i.index===editWeight.index);
-    if(!item || !item.quantity || (!restore && (!Number.isFinite(w)||w<=0))) {setDetailError("Introduce un peso válido");return;}
-    setBusyDetail(true);setDetailError("");
-    try {
-      if(!restore && editWeight.scope==="plan") {
-        if(!window.confirm("¿Actualizar el factor general del plan?")) return;
-        const {error}=await supabase.from("cooking_conversions").update({conversion_factor:w/item.quantity}).eq("plan_id",selectedMeal.nutrition_plan_id).eq("ingredient_name",item.ingredient).eq("cooking_method",editWeight.method).select("id").single();
-        if(error) throw error;
-      }
-      const {error}=await supabase.rpc("save_cooking_override",{p_planned_meal_id:id,p_ingredient_index:editWeight.index,p_cooking_method:editWeight.method,p_cooked_weight:restore||editWeight.scope==="plan"?null:w});
-      if(error) throw error; setEditWeight(null); await refreshDetail(id);
-    } catch(e){setDetailError((e as {message?:string}).message ?? "No se pudo guardar el peso");} finally{setBusyDetail(false);}
-  }
-
   // SESIÓN
   useEffect(() => {
     let active = true;
@@ -1138,10 +1120,7 @@ export default function HomePage() {
                     return methods.map(method=>{
                       const c=matches.find(c=>c.cooking_method===method); const o=overrides.find(o=>o.cooking_method===method);
                       const weight=o?Number(o.cooked_weight):Math.round(Number(item.quantity)*Number(c?.conversion_factor));
-                      const editing=editWeight?.index===item.index && editWeight.method===method;
                       return <div key={`${item.index}-${method}`} style={{padding:"12px 0",borderBottom:`1px solid ${C.border}`,fontSize:12}}><strong>{item.ingredient}</strong><div style={{color:C.muted,fontSize:11,margin:"4px 0"}}>{method}{o?" · Ajuste individual":""}</div><div style={{display:"flex",justifyContent:"space-between",gap:8}}><span>{item.quantity} g crudo</span><strong style={{color:C.darkGreen}}>{o?"":"≈ "}{formatAmount(weight)} g cocinado</strong></div>
-                      {editableMeal && !editing && <button disabled={busyDetail} onClick={()=>setEditWeight({index:item.index,method,weight:String(weight),scope:"meal"})} style={{border:0,background:C.pale,color:C.darkGreen,padding:8,borderRadius:8,marginTop:8,fontFamily:"inherit"}}>Editar peso</button>}
-                      {editableMeal && editing && editWeight && <div style={{background:C.pale,padding:12,borderRadius:10,marginTop:8,display:"grid",gap:8}}><label>Peso cocinado (g)<input type="number" min="0.01" step="any" value={editWeight.weight} onChange={e=>setEditWeight({...editWeight,weight:e.target.value})} style={{width:"100%",padding:8,boxSizing:"border-box"}}/></label><label><input type="radio" checked={editWeight.scope==="meal"} onChange={()=>setEditWeight({...editWeight,scope:"meal"})}/> Solo esta comida</label>{c && <label><input type="radio" checked={editWeight.scope==="plan"} onChange={()=>setEditWeight({...editWeight,scope:"plan"})}/> Actualizar conversión del plan</label>}<AppButton disabled={busyDetail} onClick={()=>void saveWeight()}>Guardar ajuste</AppButton>{o && <AppButton secondary disabled={busyDetail} onClick={()=>void saveWeight(true)}>Restaurar estimación</AppButton>}<AppButton secondary disabled={busyDetail} onClick={()=>setEditWeight(null)}>Cancelar</AppButton></div>}
                       </div>;
                     });
                   })}
