@@ -30,6 +30,7 @@ import { createClient } from "../lib/supabase/client";
 import ShoppingList from "../components/ShoppingList";
 import NutritionPlans from "../components/NutritionPlans";
 import FoodCatalog from "../components/FoodCatalog";
+import BodyProgress from "../components/BodyProgress";
 
 type Section =
   | "home"
@@ -1532,10 +1533,11 @@ export default function HomePage() {
           )
         )}
 
-        {/* OTRAS SECCIONES */}
-        {section !== "home" &&
-          section !== "nutrition" &&
-          section !== "library" && (
+        {/* MI PROGRESO */}
+        {section === "progress" && <BodyProgress />}
+
+        {/* ENTRENAMIENTO */}
+        {section === "training" && (
             <>
               <section style={{ marginBottom: 23 }}>
                 <div
