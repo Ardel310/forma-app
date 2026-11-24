@@ -295,6 +295,8 @@ export default function HomePage() {
     useState(false);
   const [optionError, setOptionError] = useState("");
 
+  const [duplicating, setDuplicating] = useState(false);
+  const [weekMessage, setWeekMessage] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
   const [showShopping, setShowShopping] = useState(false);
   const [conversions, setConversions] = useState<Conversion[]>([]);
@@ -423,123 +425,71 @@ export default function HomePage() {
   }
 
   // CONSULTAR OPCIONES DE LA MISMA COMIDA
-  async function showOptions() {
-    if (!selectedMeal) return;
-
+  async function showOptions(target = selectedMeal) {
+    if (!target) return;
     setChangingOption(true);
     setLoadingOptions(true);
     setOptionError("");
     setOptions([]);
-
-    const { data, error } = await supabase
-      .from("nutrition_meals")
-      .select(
-        "id, plan_id, meal_type, option_number, name, instructions"
-      )
-      .eq("plan_id", selectedMeal.nutrition_plan_id)
-      .eq("meal_type", selectedMeal.meal_type)
-      .order("option_number", { ascending: true });
-
-    if (error) {
-      setOptionError(
-        `${error.message} (${error.code || "sin código"})`
-      );
-    } else {
+    try {
+      const { data: plans, error: planError } = await supabase
+        .from("nutrition_plans").select("id")
+        .eq("status", "active")
+        .lte("start_date", target.meal_date)
+        .or(`end_date.is.null,end_date.gte.${target.meal_date}`);
+      if (planError) throw planError;
+      if (!plans?.length) throw new Error("No hay un plan activo para esta fecha.");
+      if (plans.length !== 1) throw new Error("Hay varios planes activos para esta fecha. Revisa Biblioteca.");
+      const { data, error } = await supabase.from("nutrition_meals")
+        .select("id, plan_id, meal_type, option_number, name, instructions")
+        .eq("plan_id", plans[0].id).eq("meal_type", target.meal_type)
+        .order("option_number");
+      if (error) throw error;
       setOptions((data ?? []) as NutritionOption[]);
-    }
-
-    setLoadingOptions(false);
+    } catch (error) {
+      setOptionError((error as {message?: string}).message || "No se pudieron cargar las opciones.");
+    } finally { setLoadingOptions(false); }
   }
 
-  // GUARDAR OPCIÓN CON SU COPIA HISTÓRICA
+  function openEmptyMeal(date: string, type: string) {
+    const target: PlannedMeal = {id:"", user_id:"", meal_date:date, meal_type:type,
+      nutrition_plan_id:"", nutrition_meal_id:null, meal_name_snapshot:null,
+      ingredients_snapshot:[], instructions_snapshot:null};
+    openMeal(target);
+    void showOptions(target);
+  }
+
   async function saveOption(option: NutritionOption) {
     if (!selectedMeal || savingOption) return;
-
-    if (option.id === selectedMeal.nutrition_meal_id) {
-      setChangingOption(false);
-      return;
-    }
-
     setSavingOption(true);
     setOptionError("");
-
     try {
-      const { data: ingredientRows, error: ingredientsError } =
-        await supabase
-          .from("nutrition_ingredients")
-          .select("*")
-          .eq("meal_id", option.id);
-
-      if (ingredientsError) {
-        throw new Error(
-          `Ingredientes: ${ingredientsError.message}`
-        );
-      }
-
-      const rawRows = (ingredientRows ?? []) as Record<
-        string,
-        unknown
-      >[];
-
-      if (rawRows.length === 0) {
-        throw new Error(
-          "Esta opción no tiene ingredientes registrados. No se ha modificado la comida."
-        );
-      }
-
-      const ingredientsSnapshot =
-        normalizeIngredients(rawRows);
-
-      if (
-        ingredientsSnapshot.length !== rawRows.length ||
-        ingredientsSnapshot.some(
-          (ingredient) =>
-            ingredient.quantity === null ||
-            !ingredient.unit
-        )
-      ) {
-        throw new Error(
-          "No se han podido interpretar todas las cantidades de esta opción. No se ha guardado ningún cambio."
-        );
-      }
-
-      const { data: updated, error: updateError } =
-        await supabase
-          .from("weekly_meal_plans")
-          .update({
-            nutrition_meal_id: option.id,
-            meal_name_snapshot: option.name,
-            ingredients_snapshot: ingredientsSnapshot,
-            instructions_snapshot: option.instructions,
-          })
-          .eq("id", selectedMeal.id)
-          .eq("nutrition_plan_id", selectedMeal.nutrition_plan_id)
-          .select("id");
-
-      if (updateError) {
-        throw new Error(
-          `No se pudo guardar: ${updateError.message}`
-        );
-      }
-
-      if (!updated || updated.length !== 1) {
-        throw new Error(
-          "No se ha confirmado la actualización. Revisa los permisos de escritura."
-        );
-      }
-
+      const {error} = await supabase.rpc("save_planned_meal", {
+        p_meal_date: selectedMeal.meal_date,
+        p_meal_type: selectedMeal.meal_type,
+        p_nutrition_meal_id: option.id,
+      });
+      if (error) throw error;
       setSelectedMeal(null);
       setChangingOption(false);
-      setRefreshKey((value) => value + 1);
+      setRefreshKey(v => v + 1);
     } catch (error) {
-      setOptionError(
-        error instanceof Error
-          ? error.message
-          : "Error desconocido al cambiar la comida."
-      );
-    } finally {
-      setSavingOption(false);
-    }
+      setOptionError((error as {message?: string}).message || "No se pudo guardar la comida.");
+    } finally { setSavingOption(false); }
+  }
+
+  async function duplicateWeek() {
+    if (!weekStart || duplicating) return;
+    setDuplicating(true);
+    setWeekMessage("");
+    try {
+      const {data,error} = await supabase.rpc("duplicate_previous_week", {p_week_start:weekStart});
+      if (error) throw error;
+      setWeekMessage(Number(data) > 0 ? `${data} comidas copiadas. Las existentes se han conservado.` : "No hay comidas compatibles pendientes de copiar. Puedes seleccionar las opciones individualmente.");
+      setRefreshKey(v => v + 1);
+    } catch(error) {
+      setWeekMessage((error as {message?:string}).message || "No se pudo duplicar la semana.");
+    } finally { setDuplicating(false); }
   }
 
   async function logout() {
@@ -558,6 +508,8 @@ export default function HomePage() {
   }
 
   function changeWeek(days: number) {
+    if (duplicating) return;
+    setWeekMessage("");
     const next = addDays(weekStart, days);
     setWeekStart(next);
     setSelectedDay(next);
@@ -603,9 +555,10 @@ export default function HomePage() {
             <button
               key={type.id}
               type="button"
-              disabled={!meal || !interactive}
+              disabled={!interactive}
               onClick={() => {
                 if (meal) openMeal(meal);
+                else openEmptyMeal(section === "home" ? today : selectedDay, type.id);
               }}
               style={{
                 width: "100%",
@@ -618,7 +571,7 @@ export default function HomePage() {
                 textAlign: "left",
                 fontFamily: "inherit",
                 cursor:
-                  meal && interactive ? "pointer" : "default",
+                  interactive ? "pointer" : "default",
               }}
             >
               <span
@@ -660,11 +613,11 @@ export default function HomePage() {
                   }}
                 >
                   {meal?.meal_name_snapshot ||
-                    "Sin planificar"}
+                    "Sin planificar · Añadir"}
                 </span>
               </span>
 
-              {meal && interactive && (
+              {interactive && (
                 <ChevronRight
                   size={16}
                   color={C.green}
@@ -1021,6 +974,7 @@ export default function HomePage() {
                     "Sin planificar"}
                 </h1>
 
+                {selectedMeal.id && (<>
                 <section
                   style={{
                     background: C.white,
@@ -1129,9 +1083,10 @@ export default function HomePage() {
                     <p style={{fontSize:11,color:C.muted,lineHeight:1.6,marginBottom:0}}>Valores orientativos. El peso real depende de la cocción. Las cantidades prescritas siguen siendo en crudo.</p>
                   </section>
                 )}
+                </>)}
                 {!changingOption ? (
-                  <AppButton onClick={showOptions}>
-                    Cambiar esta comida
+                  <AppButton onClick={() => void showOptions()}>
+                    {selectedMeal.id ? "Cambiar esta comida" : "Seleccionar comida"}
                   </AppButton>
                 ) : (
                   <section
@@ -1148,7 +1103,7 @@ export default function HomePage() {
                         margin: "0 0 14px",
                       }}
                     >
-                      Elige otra opción
+                      {selectedMeal.id ? "Elige otra opción" : "Elige una comida del plan activo"}
                     </h2>
 
                     {loadingOptions ? (
@@ -1245,7 +1200,8 @@ export default function HomePage() {
                       <AppButton
                         secondary
                         onClick={() => {
-                          setChangingOption(false);
+                          if (!selectedMeal.id) closeMeal();
+                          else setChangingOption(false);
                           setOptionError("");
                         }}
                         disabled={savingOption}
@@ -1428,6 +1384,12 @@ export default function HomePage() {
                   </div>
                 </section>
 
+                <div style={{marginBottom:16}}>
+                  <AppButton secondary onClick={() => void duplicateWeek()} disabled={duplicating || loadingMeals || !!mealError}>
+                    {duplicating ? "Copiando semana..." : "Duplicar semana anterior"}
+                  </AppButton>
+                  {weekMessage && <p role="status" style={{fontSize:12,color:C.darkGreen,lineHeight:1.6}}>{weekMessage}</p>}
+                </div>
                 <section
                   style={{
                     background: C.white,
