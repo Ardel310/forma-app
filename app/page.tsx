@@ -23,11 +23,13 @@ import {
   Check,
   ShoppingCart,
   Scale,
+  Apple,
   type LucideIcon,
 } from "lucide-react";
 import { createClient } from "../lib/supabase/client";
 import ShoppingList from "../components/ShoppingList";
 import NutritionPlans from "../components/NutritionPlans";
+import FoodCatalog from "../components/FoodCatalog";
 
 type Section =
   | "home"
@@ -276,6 +278,11 @@ export default function HomePage() {
   const supabase = useMemo(() => createClient(), []);
 
   const [section, setSection] = useState<Section>("home");
+  const [libraryView, setLibraryView] = useState<"menu" | "plans" | "catalog">("menu");
+  function openLibraryView(view: "menu" | "plans" | "catalog") {
+    setLibraryView(view);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
   const [checkingSession, setCheckingSession] =
     useState(true);
   const [loggingOut, setLoggingOut] = useState(false);
@@ -424,6 +431,7 @@ export default function HomePage() {
 
   function navigate(destination: Section) {
     setSection(destination);
+    setLibraryView("menu");
     setShowShopping(false);
     if (destination === "home" && today) setWeekStart(mondayOf(today));
     setSelectedMeal(null);
@@ -1511,7 +1519,28 @@ export default function HomePage() {
         )}
 
         {/* BIBLIOTECA */}
-        {section === "library" && <NutritionPlans />}
+        {section === "library" && (
+          libraryView === "catalog" ? <FoodCatalog onBack={() => openLibraryView("menu")} /> :
+          libraryView === "plans" ? <>
+            <button type="button" onClick={() => openLibraryView("menu")} style={{display:"flex",alignItems:"center",gap:8,border:0,background:"transparent",color:C.green,fontFamily:"inherit",fontSize:12,cursor:"pointer",padding:"0 0 18px"}}><ArrowLeft size={18}/> Volver a Biblioteca</button>
+            <NutritionPlans />
+          </> : <>
+            <section style={{marginBottom:23}}>
+              <h1 style={{fontSize:28,fontWeight:600,margin:"0 0 7px"}}>Biblioteca</h1>
+              <p style={{fontSize:12,color:C.muted,margin:0}}>Todos tus recursos en un mismo lugar.</p>
+            </section>
+            {([
+              {view:"plans",Icon:BookOpen,title:"Planes nutricionales",description:"Gestiona tus planes, recetas y documentos."},
+              {view:"catalog",Icon:Apple,title:"Catálogo de alimentos",description:"Consulta tus ingredientes y sus categorías."}
+            ] as const).map(({view,Icon,title,description}) => (
+              <button key={view} type="button" onClick={() => openLibraryView(view)} style={{width:"100%",display:"flex",alignItems:"center",gap:13,padding:17,marginBottom:14,background:C.white,border:`1px solid ${C.border}`,borderRadius:20,textAlign:"left",fontFamily:"inherit",color:C.text,cursor:"pointer"}}>
+                <span style={{width:46,height:46,flexShrink:0,display:"grid",placeItems:"center",background:C.pale,color:C.green,borderRadius:13}}><Icon size={23} strokeWidth={1.7}/></span>
+                <span style={{flex:1,minWidth:0}}><strong style={{display:"block",fontSize:14,fontWeight:600,marginBottom:5}}>{title}</strong><span style={{display:"block",fontSize:12,color:C.muted,lineHeight:1.5}}>{description}</span></span>
+                <ChevronRight size={19} color={C.green}/>
+              </button>
+            ))}
+          </>
+        )}
 
         {/* OTRAS SECCIONES */}
         {section !== "home" &&
