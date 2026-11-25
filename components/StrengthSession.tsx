@@ -4,7 +4,7 @@ import type { CSSProperties } from "react";
 import { ArrowLeft, Plus, Dumbbell, X } from "lucide-react";
 import { createClient } from "../lib/supabase/client";
 
-type Session = { id: string; name: string; session_date: string; status: string };
+type Session = { id: string; name: string; session_date: string; status: string; started_at: string | null; notes: string | null };
 type Exercise = { id: string; name: string; equipment: string | null; is_active: boolean; is_unilateral: boolean; image_path: string | null };
 type Entry = { id: string; exercise_id: string; sort_order: number };
 type SetRow = { id: string; training_exercise_id: string; set_number: number; set_type: "warmup" | "working"; weight_kg: number | null; reps: number | null; side: "both" | "left" | "right"; is_completed: boolean; completed_at: string | null };
@@ -15,6 +15,13 @@ const btn: CSSProperties = { fontFamily: "inherit", fontSize: 13, fontWeight: 60
 export default function StrengthSession({ sessionId, onBack }: { sessionId: string; onBack: () => void }) {
   const db = useMemo(() => createClient(), []);
   const [session, setSession] = useState<Session | null>(null);
+  const [previous,setPrevious]=useState<Record<string,{date:string;rows:SetRow[]}>>({});
+  const [duration,setDuration]=useState("");
+  const [calories,setCalories]=useState("");
+  const [notes,setNotes]=useState("");
+  const [discomfort,setDiscomfort]=useState("");
+  const [closing,setClosing]=useState(false);
+  const closingRef=useRef(false);
   const [sets, setSets] = useState<SetRow[]>([]);
   const [entries, setEntries] = useState<Entry[]>([]);
   const [library, setLibrary] = useState<Exercise[]>([]);
@@ -37,7 +44,7 @@ export default function StrengthSession({ sessionId, onBack }: { sessionId: stri
     async function load() {
       try {
         const [s,e,l,g,m] = await Promise.all([
-          db.from("training_sessions").select("id,name,session_date,status").eq("id",sessionId).single(),
+          db.from("training_sessions").select("id,name,session_date,status,started_at,notes").eq("id",sessionId).single(),
           db.from("training_exercises").select("id,exercise_id,sort_order").eq("session_id",sessionId).order("sort_order").order("id"),
           db.from("exercise_library").select("id,name,equipment,is_active,is_unilateral,image_path").order("name").order("id"),
           db.from("exercise_muscle_groups").select("exercise_id,muscle_group_id").eq("is_primary",true),
@@ -47,7 +54,7 @@ export default function StrengthSession({ sessionId, onBack }: { sessionId: stri
         const ids = (e.data ?? []).map(x=>x.id);
         const rows = ids.length ? await db.from("training_sets").select(setFields).in("training_exercise_id",ids).order("set_number").order("id") : {data:[],error:null};
         if(rows.error) throw rows.error;
-        if(alive) { const map: Record<string,{name:string;color:string}>={}; for(const link of g.data??[]){const group=(m.data??[]).find(x=>x.id===link.muscle_group_id); if(group) map[link.exercise_id]={name:group.name,color:group.color};} setGroups(map); replaceSets(()=> (rows.data ?? []) as SetRow[]); setSession(s.data); setEntries(e.data ?? []); setLibrary(l.data ?? []); }
+        if(alive) { const map: Record<string,{name:string;color:string}>={}; for(const link of g.data??[]){const group=(m.data??[]).find(x=>x.id===link.muscle_group_id); if(group) map[link.exercise_id]={name:group.name,color:group.color};} setGroups(map); replaceSets(()=> (rows.data ?? []) as SetRow[]); setSession(s.data); setNotes(s.data.notes??""); setEntries(e.data ?? []); setLibrary(l.data ?? []); }
       } catch(err) { if(alive) setError((err as {message?:string}).message ?? "No se pudo cargar la sesión."); }
       finally { if(alive) setLoading(false); }
     }
@@ -71,8 +78,60 @@ export default function StrengthSession({ sessionId, onBack }: { sessionId: stri
     }
     void loadPhotos(); return ()=>{alive=false;};
   },[db,library]);
+  useEffect(()=>{
+    let alive=true;
+    async function loadPrevious(){
+      try {
+        const result:Record<string,{date:string;rows:SetRow[]}>={};
+        for(const exerciseId of Array.from(new Set(entries.map(e=>e.exercise_id)))){
+          const q=await db.from("training_exercises").select("id,training_sessions!inner(id,session_date,status,finished_at)").eq("exercise_id",exerciseId).eq("training_sessions.status","completed").neq("session_id",sessionId).lte("training_sessions.session_date",session?.session_date??"0001-01-01").order("session_date",{referencedTable:"training_sessions",ascending:false});
+          if(q.error) throw q.error;
+          const candidates=(q.data??[]).map(x=>({id:x.id,session:x.training_sessions as unknown as {id:string;session_date:string;finished_at:string|null}})).filter(x=>x.session?.id).sort((a,b)=>b.session.session_date.localeCompare(a.session.session_date)||(b.session.finished_at??"").localeCompare(a.session.finished_at??""));
+          for(const candidate of candidates){
+            const r=await db.from("training_sets").select(setFields).eq("training_exercise_id",candidate.id).eq("is_completed",true).order("set_number");
+            if(r.error) throw r.error;
+            if(r.data?.length){result[exerciseId]={date:candidate.session.session_date,rows:r.data as SetRow[]};break;}
+          }
+        }
+        if(alive)setPrevious(result);
+      }catch(err){if(alive)setError((err as {message?:string}).message??"No se pudo consultar el histórico.");}
+    }
+    if(session)void loadPrevious();
+    return()=>{alive=false;};
+  },[db,entries,sessionId,session]);
+  function copyPrevious(entry:Entry){
+    void mutate(async()=>{
+      if(setsRef.current.some(s=>s.training_exercise_id===entry.id))throw new Error("Solo puedes copiar series si el ejercicio aún no tiene series.");
+      const source=previous[entry.exercise_id]?.rows??[];
+      if(!source.length)return;
+      const {data,error}=await db.from("training_sets").insert(source.map(r=>({training_exercise_id:entry.id,set_number:r.set_number,set_type:r.set_type,weight_kg:r.weight_kg,reps:r.reps,side:r.side,is_completed:false}))).select(setFields);
+      if(error)throw error;
+      replaceSets(old=>[...old,...(data as SetRow[])]);
+    });
+  }
+  async function closeSession(remove=false){
+    if(!session||closingRef.current)return;
+    if(remove&&!window.confirm("¿Eliminar definitivamente este entrenamiento, sus ejercicios y series?"))return;
+    closingRef.current=true;setClosing(true);setError("");
+    try{
+      await queue.current;
+      if(lock.current)throw new Error("Espera a que termine el guardado.");
+      if(remove){
+        const r=await db.from("training_sessions").delete().eq("id",session.id).select("id").single();if(r.error)throw r.error;
+      }else{
+        const mins=Number(duration),kcal=calories.trim()===""?null:Number(calories);
+        if(!Number.isInteger(mins)||mins<=0)throw new Error("Introduce una duración válida en minutos.");
+        if(kcal!==null&&(!Number.isFinite(kcal)||kcal<0))throw new Error("Introduce calorías válidas.");
+        if(!setsRef.current.some(s=>s.is_completed))throw new Error("Completa al menos una serie antes de finalizar.");
+        if(setsRef.current.some(s=>!s.is_completed)&&!window.confirm("Hay series sin completar. ¿Finalizar igualmente?"))return;
+        const r=await db.from("training_sessions").update({status:"completed",duration_minutes:mins,active_calories:kcal,notes:notes.trim()||null,discomfort_notes:discomfort.trim()||null,finished_at:session.started_at?new Date().toISOString():null}).eq("id",session.id).select("id").single();if(r.error)throw r.error;
+      }
+      onBack();
+    }catch(err){setError((err as {message?:string}).message??"No se pudo guardar el entrenamiento.");}
+    finally{closingRef.current=false;setClosing(false);}
+  }
   async function add(exercise: Exercise) {
-    if(lock.current || !session || session.status === "completed" || !exercise.is_active) return;
+    if(closingRef.current || lock.current || !session || session.status === "completed" || !exercise.is_active) return;
     lock.current = true; setBusy(true); setError("");
     try {
       const order = entries.reduce((max,e) => Math.max(max,e.sort_order),-1)+1;
@@ -86,7 +145,7 @@ export default function StrengthSession({ sessionId, onBack }: { sessionId: stri
     const next=update(setsRef.current); setsRef.current=next; setSets(next);
   }
   function mutate(action: () => Promise<void>) {
-    if(!session || session.status === "completed" || (lock.current && pending.current===0)) return;
+    if(closingRef.current || !session || session.status === "completed" || (lock.current && pending.current===0)) return;
     pending.current++; lock.current=true; setBusy(true);
     queue.current=queue.current.then(async()=>{
       setError("");
@@ -140,7 +199,7 @@ export default function StrengthSession({ sessionId, onBack }: { sessionId: stri
     void mutate(async()=>{const {error}=await db.from("training_sets").delete().eq("id",row.id); if(error) throw error; replaceSets(old=>old.filter(s=>s.id!==row.id));});
   }
   const field: CSSProperties={width:"100%",minWidth:0,boxSizing:"border-box",fontFamily:"inherit",fontSize:16,padding:"8px 4px",border:`1px solid ${C.border}`,borderRadius:8,textAlign:"center",color:C.text};
-  const readOnly=session?.status==="completed";
+  const readOnly=closing||session?.status==="completed";
   const filtered = library.filter(e => e.is_active && `${e.name} ${e.equipment ?? ""}`.toLocaleLowerCase("es").includes(search.trim().toLocaleLowerCase("es")));
   return <div className="strength-session-stable" style={{display:"flex",flexDirection:"column",gap:16,width:"100%",color:C.text}}>
     <style>{`.strength-session-stable button:disabled, .strength-session-stable input:disabled, .strength-session-stable select:disabled { opacity: 1 !important; filter: none !important; } .strength-session-stable input:not([type=checkbox]), .strength-session-stable select { background-color: #fff; color: #25382F; -webkit-text-fill-color: #25382F; } .strength-session-stable button, .strength-session-stable input, .strength-session-stable select { -webkit-tap-highlight-color: transparent; transition: none !important; }`}</style>
@@ -150,12 +209,14 @@ export default function StrengthSession({ sessionId, onBack }: { sessionId: stri
     {loading ? <p style={{color:C.muted}}>Cargando entrenamiento…</p> : !session ? <button style={btn} onClick={()=>setRetry(n=>n+1)}>Reintentar</button> : <>
       <header><h2 style={{margin:0,fontSize:24,fontWeight:600}}>{session.name}</h2><p style={{fontSize:13,color:C.muted,margin:"5px 0 0"}}>{new Date(`${session.session_date}T12:00:00`).toLocaleDateString("es-ES",{day:"numeric",month:"short",year:"numeric"})} · {session.status === "completed" ? "Finalizado" : session.status === "in_progress" ? "En curso" : "Borrador"}</p></header>
       {entries.length === 0 && <div style={{...card,textAlign:"center",color:C.muted,fontSize:13}}><Dumbbell size={28} color={C.green}/><p>Todavía no hay ejercicios en esta sesión.</p></div>}
-      {entries.map((entry,i)=>{const exercise=library.find(e=>e.id===entry.exercise_id); const rows=sets.filter(s=>s.training_exercise_id===entry.id).sort((a,b)=>a.set_number-b.set_number || a.side.localeCompare(b.side)); const unilateral=!!exercise?.is_unilateral||rows.some(r=>r.side!=="both"); const columns=unilateral?"30px minmax(0,1fr) minmax(0,1fr) minmax(65px,1.15fr) 25px 20px":"34px repeat(2,minmax(0,1fr)) 30px 24px"; const group=groups[entry.exercise_id]; const photo=exercise?.image_path?photos[exercise.image_path]:undefined; return <section key={entry.id} style={{...card,display:"flex",flexDirection:"column",gap:12}}>
+      {entries.map((entry,i)=>{const exercise=library.find(e=>e.id===entry.exercise_id); const rows=sets.filter(s=>s.training_exercise_id===entry.id).sort((a,b)=>a.set_number-b.set_number || a.side.localeCompare(b.side)); const unilateral=!!exercise?.is_unilateral||rows.some(r=>r.side!=="both"); const prev=previous[entry.exercise_id]; const baseColumns=unilateral?"30px minmax(0,1fr) minmax(0,1fr) minmax(65px,1.15fr) 25px 20px":"34px repeat(2,minmax(0,1fr)) 30px 24px"; const columns=prev?baseColumns.replace(/^\d+px /,"24px minmax(42px,0.9fr) "):baseColumns; const group=groups[entry.exercise_id]; const photo=exercise?.image_path?photos[exercise.image_path]:undefined; return <section key={entry.id} style={{...card,display:"flex",flexDirection:"column",gap:12}}>
         <div style={{display:"flex",alignItems:"center",gap:12}}><div style={{background:C.pale,borderRadius:12,width:48,height:48,flexShrink:0,display:"grid",placeItems:"center",overflow:"hidden"}}>{photo?<button type="button" aria-label="Ampliar fotografía" onClick={()=>setPreview(photo)} style={{border:0,padding:0,width:48,height:48,background:"none",cursor:"pointer"}}><img src={photo} alt={exercise?.name??"Ejercicio"} style={{width:"100%",height:"100%",objectFit:"cover"}}/></button>:<Dumbbell size={22} color={C.dark}/>}</div><div style={{flex:1,minWidth:0}}><div style={{display:"flex",alignItems:"center",flexWrap:"wrap",gap:6,fontWeight:600,fontSize:14}}><span>{i+1}. {exercise?.name ?? "Ejercicio"}</span></div><div style={{fontSize:12,color:C.muted}}>{exercise?.equipment ?? "Sin equipamiento indicado"}{exercise && !exercise.is_active ? " · Archivado" : ""}</div></div>{group&&<span style={{fontSize:10,fontWeight:600,borderRadius:6,padding:"4px 8px",background:group.color+"22",color:C.text,flexShrink:0,marginLeft:"auto",textAlign:"center",maxWidth:"35%",overflowWrap:"anywhere"}}>{group.name}</span>}</div>
-        {rows.length>0 && <div style={{display:"grid",gridTemplateColumns:columns,gap:5,alignItems:"center",fontSize:11,color:C.muted,textAlign:"center"}}><span>Serie</span><span>Kg</span><span>Reps</span>{unilateral&&<span>Lado</span>}<span>Hecha</span><span/></div>}
+        {prev&&<div style={{display:"flex",flexWrap:"wrap",alignItems:"center",gap:6,fontSize:11,color:C.muted}}><span>Anterior: {prev.date.split("-").reverse().join("/")} · Máx. {Math.max(0,...prev.rows.filter(r=>r.set_type==="working").map(r=>r.weight_kg??0))} kg</span>{!readOnly&&!rows.length&&<button style={{...btn,padding:6,marginLeft:"auto"}} onClick={()=>copyPrevious(entry)}>Copiar series</button>}</div>}
+        {rows.length>0 && <div style={{display:"grid",gridTemplateColumns:columns,gap:5,alignItems:"center",fontSize:11,color:C.muted,textAlign:"center"}}><span>Serie</span>{prev&&<span>Anterior</span>}<span>Kg</span><span>Reps</span>{unilateral&&<span>Lado</span>}<span>Hecha</span><span/></div>}
         {rows.map((row)=><div key={row.id} style={{display:"flex",flexDirection:"column",gap:5,background:row.is_completed?C.pale:"transparent",borderRadius:10,padding:"4px 0"}}>
           <div style={{display:"grid",gridTemplateColumns:columns,gap:5,alignItems:"center"}}>
             <button disabled={readOnly} title="Cambiar tipo de serie" style={{...btn,padding:"8px 2px"}} onClick={()=>changeType(row)}>{row.set_type==="warmup"?"A":new Set(rows.filter(s=>s.set_number<=row.set_number&&s.set_type==="working").map(s=>s.set_number)).size}</button>
+            {prev&&<span style={{fontSize:10,textAlign:"center",color:C.muted,overflowWrap:"anywhere"}}>{referenceText(row,rows,prev.rows)}</span>}
             {(["weight_kg","reps"] as const).map(k=><NumericField key={k} label={k==="weight_kg"?"Peso en kg":"Repeticiones"} value={row[k]} disabled={readOnly} style={field} onSave={v=>saveSet(row,{[k]:v})}/>)}
             {unilateral && (row.side==="both"?<select aria-label="Lado" disabled={readOnly} value="both" onChange={()=>splitSet(row)} style={{...field,fontSize:12,padding:"8px 1px"}}><option value="both">Ambos</option><option value="split">Separar</option></select>:<span style={{fontSize:12,textAlign:"center"}}>{row.side==="left"?"Izq.":"Der."}</span>)}
             <input aria-label="Serie completada" type="checkbox" disabled={readOnly} checked={row.is_completed} onChange={e=>saveSet(row,{is_completed:e.target.checked,completed_at:e.target.checked?new Date().toISOString():null})} style={{accentColor:C.green,width:20,height:20,margin:"auto"}}/>
@@ -168,6 +229,8 @@ export default function StrengthSession({ sessionId, onBack }: { sessionId: stri
       </section>})}
       {session.status !== "completed" && !picker && <button type="button" style={{...btn,display:"flex",alignItems:"center",justifyContent:"center",gap:8}} onClick={()=>{setPicker(true);setSearch("");}}><Plus size={18}/> Añadir ejercicio</button>}
       {picker && <section style={{...card,display:"flex",flexDirection:"column",gap:12}}><div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}><strong style={{fontSize:15}}>Seleccionar ejercicio</strong><button type="button" disabled={busy} style={{...btn,display:"flex",alignItems:"center",gap:6}} onClick={()=>setPicker(false)}><X size={16}/> Cerrar</button></div><input aria-label="Buscar ejercicio" placeholder="Buscar ejercicio o equipamiento" value={search} onChange={e=>setSearch(e.target.value)} style={{fontFamily:"inherit",fontSize:16,padding:12,border:`1px solid ${C.border}`,borderRadius:12,width:"100%",boxSizing:"border-box"}}/>{filtered.length===0 && <p style={{fontSize:13,color:C.muted}}>No hay ejercicios disponibles.</p>}{filtered.map(e=><button type="button" key={e.id} disabled={busy} onClick={()=>void add(e)} style={{...btn,background:"#fff",border:`1px solid ${C.border}`,display:"flex",alignItems:"center",textAlign:"left",gap:10}}><div style={{flex:1}}>{e.name}<div style={{fontSize:11,fontWeight:400,color:C.muted}}>{e.equipment ?? ""}</div></div><Plus size={18}/></button>)}</section>}
+      {session.status!=="completed"&&<section style={{...card,display:"flex",flexDirection:"column",gap:10}}><strong>Finalizar entrenamiento</strong><label>Duración (minutos)<input style={field} inputMode="numeric" value={duration} onChange={e=>setDuration(e.target.value)}/></label><label>Calorías activas (opcional)<input style={field} inputMode="decimal" value={calories} onChange={e=>setCalories(e.target.value)}/></label><label>Sensaciones y observaciones<textarea style={{...field,textAlign:"left"}} rows={2} value={notes} onChange={e=>setNotes(e.target.value)}/></label><label>Molestias (opcional)<textarea style={{...field,textAlign:"left"}} rows={2} value={discomfort} onChange={e=>setDiscomfort(e.target.value)}/></label><button type="button" disabled={closing||busy} style={{...btn,background:C.green,color:"white"}} onClick={()=>void closeSession()}>Finalizar entrenamiento</button></section>}
+      <button type="button" disabled={closing||busy} style={{...btn,background:"none",color:"#A33D3D"}} onClick={()=>void closeSession(true)}>Eliminar entrenamiento</button>
     </>}
   </div>;
 }
@@ -176,4 +239,14 @@ function NumericField({label,value,disabled,style,onSave}:{label:string;value:nu
   const [draft,setDraft]=useState(value===null?"":String(value));
   useEffect(()=>{setDraft(value===null?"":String(value));},[value]);
   return <input aria-label={label} inputMode={label==="Repeticiones"?"numeric":"decimal"} placeholder="—" value={draft} disabled={disabled} style={style} onChange={e=>setDraft(e.target.value)} onBlur={()=>{const raw=draft.trim().replace(",","."); const next=raw===""?null:Number(raw); if(next!==value) onSave(next);}} onKeyDown={e=>{if(e.key==="Enter") e.currentTarget.blur();}}/>;
+}
+function referenceText(row:SetRow,current:SetRow[],previous:SetRow[]){
+  const numbers=(rows:SetRow[])=>Array.from(new Set(rows.filter(r=>r.set_type===row.set_type).map(r=>r.set_number))).sort((a,b)=>a-b);
+  const n=numbers(previous)[numbers(current).indexOf(row.set_number)];
+  const matches=previous.filter(r=>r.set_type===row.set_type&&r.set_number===n);
+  const format=(r:SetRow)=>`${r.weight_kg??"—"} × ${r.reps??"—"}`;
+  const exact=matches.find(r=>r.side===row.side)??matches.find(r=>r.side==="both");
+  if(exact)return format(exact);
+  if(row.side==="both"&&matches.length)return matches.map(r=>`${r.side==="left"?"I":"D"}: ${format(r)}`).join(" / ");
+  return "—";
 }
