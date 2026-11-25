@@ -12,6 +12,7 @@ import {
   ChevronRight,
   ArrowLeft,
 } from "lucide-react";
+import ExerciseLibrary from "./ExerciseLibrary";
 
 type TrainingView =
   | "home"
@@ -75,10 +76,28 @@ export default function Training() {
   const [view, setView] =
     useState<TrainingView>("home");
 
+  function openView(next: TrainingView) {
+    setView(next);
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
+  }
+
   const selected = sections.find(
     (section) => section.id === view
   );
 
+  // BIBLIOTECA DE EJERCICIOS
+  if (view === "exercises") {
+    return (
+      <ExerciseLibrary
+        onBack={() => openView("home")}
+      />
+    );
+  }
+
+  // APARTADOS PENDIENTES DE DESARROLLO
   if (view !== "home" && selected) {
     const Icon = selected.icon;
 
@@ -91,7 +110,8 @@ export default function Training() {
         }}
       >
         <button
-          onClick={() => setView("home")}
+          type="button"
+          onClick={() => openView("home")}
           style={{
             display: "flex",
             alignItems: "center",
@@ -154,6 +174,7 @@ export default function Training() {
     );
   }
 
+  // MENÚ PRINCIPAL DE ENTRENAMIENTO
   return (
     <div
       style={{
@@ -199,7 +220,8 @@ export default function Training() {
           return (
             <button
               key={section.id}
-              onClick={() => setView(section.id)}
+              type="button"
+              onClick={() => openView(section.id)}
               style={{
                 display: "flex",
                 alignItems: "center",
