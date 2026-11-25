@@ -12,8 +12,10 @@ import {
   ChevronRight,
   ArrowLeft,
 } from "lucide-react";
+
 import ExerciseLibrary from "./ExerciseLibrary";
 import StrengthTraining from "./StrengthTraining";
+import CardioTraining from "./CardioTraining";
 
 type TrainingView =
   | "home"
@@ -44,7 +46,7 @@ const sections = [
   {
     id: "cardio",
     title: "Cardio y clases",
-    description: "Cardio, clases colectivas y movilidad",
+    description: "Cardio, clases colectivas y cuerpo-mente",
     icon: HeartPulse,
   },
   {
@@ -98,6 +100,15 @@ export default function Training() {
     );
   }
 
+  // MÓDULO DE CARDIO Y CLASES
+  if (view === "cardio") {
+    return (
+      <CardioTraining
+        onBack={() => openView("home")}
+      />
+    );
+  }
+
   // BIBLIOTECA DE EJERCICIOS
   if (view === "exercises") {
     return (
@@ -132,6 +143,8 @@ export default function Training() {
             color: C.dark,
             fontSize: 13,
             fontWeight: 600,
+            fontFamily: "inherit",
+            cursor: "pointer",
             alignSelf: "flex-start",
           }}
         >
@@ -243,6 +256,7 @@ export default function Training() {
                 background: C.white,
                 textAlign: "left",
                 color: C.text,
+                fontFamily: "inherit",
                 cursor: "pointer",
               }}
             >
