@@ -320,17 +320,11 @@ export default function ExerciseForm({
   const [equipmentOptions, setEquipmentOptions] =
     useState<string[]>(defaultEquipment);
 
-  const [gymOptions, setGymOptions] =
-    useState<string[]>([]);
-
   const [name, setName] =
     useState(exercise?.name ?? "");
 
   const [equipment, setEquipment] =
     useState(exercise?.equipment ?? "");
-
-  const [gym, setGym] =
-    useState(exercise?.gym ?? "");
 
   const [primaryGroup, setPrimaryGroup] =
     useState("");
@@ -404,7 +398,7 @@ export default function ExerciseForm({
 
             supabase
               .from("exercise_library")
-              .select("equipment,gym"),
+              .select("equipment"),
           ]);
 
         if (groupResult.error)
@@ -433,19 +427,7 @@ export default function ExerciseForm({
           ])
         ).sort((a, b) => a.localeCompare(b, "es"));
 
-        const gyms = Array.from(
-          new Set(
-            items
-              .map((item) => item.gym)
-              .filter(
-                (value): value is string =>
-                  Boolean(value)
-              )
-          )
-        ).sort((a, b) => a.localeCompare(b, "es"));
-
         setEquipmentOptions(equipments);
-        setGymOptions(gyms);
 
         if (exerciseId) {
           const { data, error } = await supabase
@@ -653,7 +635,7 @@ export default function ExerciseForm({
           p_exercise_id: exercise?.id ?? null,
           p_name: name.trim(),
           p_equipment: equipment.trim() || null,
-          p_gym: gym.trim() || null,
+          p_gym: exercise?.gym ?? null,
           p_image_path: finalImagePath,
           p_technique_notes:
             techniqueNotes.trim() || null,
@@ -1188,26 +1170,6 @@ export default function ExerciseForm({
               </datalist>
             </label>
 
-            <label style={label}>
-              Gimnasio
-              <input
-                list="exercise-gym-options"
-                value={gym}
-                onChange={(e) =>
-                  setGym(e.target.value)
-                }
-                placeholder="Ej. Vitalfit"
-                disabled={busy}
-                maxLength={100}
-                style={input}
-              />
-
-              <datalist id="exercise-gym-options">
-                {gymOptions.map((item) => (
-                  <option key={item} value={item} />
-                ))}
-              </datalist>
-            </label>
           </section>
 
           {/* CONFIGURACIÓN */}
