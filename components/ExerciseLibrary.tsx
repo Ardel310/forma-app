@@ -547,22 +547,6 @@ export default function ExerciseLibrary({
         </button>
       </header>
 
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "flex-end",
-        }}
-      >
-        <button
-          type="button"
-          onClick={() => openView("groups")}
-          style={secondary}
-        >
-          <Settings2 size={17} />
-          Grupos musculares
-        </button>
-      </div>
-
       <div style={{display:"flex",alignItems:"center",gap:10}}>
       <div
         style={{
@@ -681,6 +665,15 @@ export default function ExerciseLibrary({
             fill={favoritesOnly ? "currentColor" : "none"}
           />
           Favoritos
+        </button>
+
+        <button
+          type="button"
+          onClick={() => openView("groups")}
+          style={{ ...secondary, marginLeft: "auto" }}
+        >
+          <Settings2 size={17} />
+          Grupos musculares
         </button>
 
         {hasFilters && (
