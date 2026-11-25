@@ -1,12 +1,12 @@
 "use client";
 import { useEffect, useMemo, useState, useRef } from "react";
 import type { CSSProperties } from "react";
-import { ArrowLeft, Plus, Dumbbell, X } from "lucide-react";
+import { ArrowLeft, Plus, Dumbbell, X, EllipsisVertical, ArrowUp, ArrowDown, Repeat, NotebookPen, BookOpen, Trash2 } from "lucide-react";
 import { createClient } from "../lib/supabase/client";
 
 type Session = { id: string; name: string; session_date: string; status: string; started_at: string | null; notes: string | null };
-type Exercise = { id: string; name: string; equipment: string | null; is_active: boolean; is_unilateral: boolean; image_path: string | null };
-type Entry = { id: string; exercise_id: string; sort_order: number };
+type Exercise = { id: string; name: string; equipment: string | null; is_active: boolean; is_unilateral: boolean; image_path: string | null; technique_notes: string | null; description: string | null };
+type Entry = { id: string; exercise_id: string; sort_order: number; notes: string | null; discomfort_notes: string | null };
 type SetRow = { id: string; training_exercise_id: string; set_number: number; set_type: "warmup" | "working"; weight_kg: number | null; reps: number | null; side: "both" | "left" | "right"; is_completed: boolean; completed_at: string | null };
 const setFields = "id,training_exercise_id,set_number,set_type,weight_kg,reps,side,is_completed,completed_at";
 const C = { green: "#7D8C82", dark: "#596B60", text: "#25382F", muted: "#78847B", border: "#E5EAE5", pale: "#EEF2EE" };
@@ -39,6 +39,41 @@ export default function StrengthSession({ sessionId, onBack }: { sessionId: stri
   const [busy, setBusy] = useState(false);
   const [retry, setRetry] = useState(0);
   const lock = useRef(false);
+  const [menu,setMenu]=useState<string|null>(null);
+  const [panel,setPanel]=useState<{id:string;kind:"notes"|"technique"|"replace"}|null>(null);
+  const [entryNotes,setEntryNotes]=useState("");
+  const [entryPain,setEntryPain]=useState("");
+  const [variants,setVariants]=useState<string[]>([]);
+  async function openReplacement(entry:Entry){
+    setMenu(null);setVariants([]);setSearch("");setGroupFilter("");setPicker(false);setPanel({id:entry.id,kind:"replace"});
+    const r=await db.from("exercise_variants").select("exercise_id,variant_id").or(`exercise_id.eq.${entry.exercise_id},variant_id.eq.${entry.exercise_id}`);
+    if(r.error){setError(r.error.message);return;}
+    setVariants((r.data??[]).map(x=>x.exercise_id===entry.exercise_id?x.variant_id:x.exercise_id));
+  }
+  function manage(entry:Entry,action:string,replacement?:string){
+    if(action==="delete"&&!window.confirm("¿Eliminar este ejercicio y todas sus series?"))return;
+    if(action==="replace"&&!window.confirm("¿Sustituir ejercicio? Si hay series completadas se conservará el original; si no, se borrarán sus series pendientes."))return;
+    setMenu(null);
+    void mutate(async()=>{
+      const r=await db.rpc("manage_training_exercise",{p_entry_id:entry.id,p_action:action,p_replacement_id:replacement??null});
+      if(r.error)throw r.error;
+      const e=await db.from("training_exercises").select("id,exercise_id,sort_order,notes,discomfort_notes").eq("session_id",sessionId).order("sort_order").order("id");
+      if(e.error){setRetry(n=>n+1);throw e.error;}
+      const ids=(e.data??[]).map(x=>x.id);
+      const rows=ids.length?await db.from("training_sets").select(setFields).in("training_exercise_id",ids):{data:[],error:null};
+      if(rows.error){setRetry(n=>n+1);throw rows.error;}
+      setEntries(e.data??[]);replaceSets(()=> (rows.data??[]) as SetRow[]);setPanel(null);
+    });
+  }
+  function saveEntryNotes(entry:Entry){
+    void mutate(async()=>{
+      const patch={notes:entryNotes.trim()||null,discomfort_notes:entryPain.trim()||null};
+      const r=await db.from("training_exercises").update(patch).eq("id",entry.id).select("id").single();
+      if(r.error)throw r.error;
+      setEntries(old=>old.map(e=>e.id===entry.id?{...e,...patch}:e));setPanel(null);
+    });
+  }
+
   useEffect(() => {
     let alive = true;
     setLoading(true); setError(""); setSession(null); setEntries([]); replaceSets(()=>[]); setPicker(false);
@@ -46,8 +81,8 @@ export default function StrengthSession({ sessionId, onBack }: { sessionId: stri
       try {
         const [s,e,l,g,m] = await Promise.all([
           db.from("training_sessions").select("id,name,session_date,status,started_at,notes").eq("id",sessionId).single(),
-          db.from("training_exercises").select("id,exercise_id,sort_order").eq("session_id",sessionId).order("sort_order").order("id"),
-          db.from("exercise_library").select("id,name,equipment,is_active,is_unilateral,image_path").order("name").order("id"),
+          db.from("training_exercises").select("id,exercise_id,sort_order,notes,discomfort_notes").eq("session_id",sessionId).order("sort_order").order("id"),
+          db.from("exercise_library").select("id,name,equipment,is_active,is_unilateral,image_path,technique_notes,description").order("name").order("id"),
           db.from("exercise_muscle_groups").select("exercise_id,muscle_group_id").eq("is_primary",true),
           db.from("muscle_groups").select("id,name,color")
         ]);
@@ -137,7 +172,7 @@ export default function StrengthSession({ sessionId, onBack }: { sessionId: stri
     lock.current = true; setBusy(true); setError("");
     try {
       const order = entries.reduce((max,e) => Math.max(max,e.sort_order),-1)+1;
-      const {data,error} = await db.from("training_exercises").insert({session_id:session.id,exercise_id:exercise.id,sort_order:order}).select("id,exercise_id,sort_order").single();
+      const {data,error} = await db.from("training_exercises").insert({session_id:session.id,exercise_id:exercise.id,sort_order:order}).select("id,exercise_id,sort_order,notes,discomfort_notes").single();
       if(error) throw error;
       setEntries(old => [...old,data]); setPicker(false); setSearch("");
     } catch(err) { setError((err as {message?:string}).message ?? "No se pudo añadir el ejercicio."); }
@@ -212,7 +247,18 @@ export default function StrengthSession({ sessionId, onBack }: { sessionId: stri
       <header><h2 style={{margin:0,fontSize:24,fontWeight:600}}>{session.name}</h2><p style={{fontSize:13,color:C.muted,margin:"5px 0 0"}}>{new Date(`${session.session_date}T12:00:00`).toLocaleDateString("es-ES",{day:"numeric",month:"short",year:"numeric"})} · {session.status === "completed" ? "Finalizado" : session.status === "in_progress" ? "En curso" : "Borrador"}</p></header>
       {entries.length === 0 && <div style={{...card,textAlign:"center",color:C.muted,fontSize:13}}><Dumbbell size={28} color={C.green}/><p>Todavía no hay ejercicios en esta sesión.</p></div>}
       {entries.map((entry,i)=>{const exercise=library.find(e=>e.id===entry.exercise_id); const rows=sets.filter(s=>s.training_exercise_id===entry.id).sort((a,b)=>a.set_number-b.set_number || a.side.localeCompare(b.side)); const unilateral=!!exercise?.is_unilateral||rows.some(r=>r.side!=="both"); const prev=previous[entry.exercise_id]; const baseColumns=`${unilateral?42:28}px repeat(2,minmax(0,1fr)) 25px 20px`; const columns=prev?baseColumns.replace(/^\d+px /,`${unilateral?42:28}px minmax(54px,0.9fr) `):baseColumns; const group=groups[entry.exercise_id]; const photo=exercise?.image_path?photos[exercise.image_path]:undefined; return <section key={entry.id} style={{...card,display:"flex",flexDirection:"column",gap:12}}>
-        <div style={{display:"flex",alignItems:"center",gap:12}}><div style={{background:C.pale,borderRadius:12,width:48,height:48,flexShrink:0,display:"grid",placeItems:"center",overflow:"hidden"}}>{photo?<button type="button" aria-label="Ampliar fotografía" onClick={()=>setPreview(photo)} style={{border:0,padding:0,width:48,height:48,background:"none",cursor:"pointer"}}><img src={photo} alt={exercise?.name??"Ejercicio"} style={{width:"100%",height:"100%",objectFit:"cover"}}/></button>:<Dumbbell size={22} color={C.dark}/>}</div><div style={{flex:1,minWidth:0}}><div style={{display:"flex",alignItems:"center",flexWrap:"wrap",gap:6,fontWeight:600,fontSize:14}}><span>{i+1}. {exercise?.name ?? "Ejercicio"}</span></div><div style={{fontSize:12,color:C.muted}}>{exercise?.equipment ?? "Sin equipamiento indicado"}{exercise && !exercise.is_active ? " · Archivado" : ""}</div></div>{group&&<span style={{fontSize:10,fontWeight:600,borderRadius:6,padding:"4px 8px",background:group.color+"22",color:C.text,flexShrink:0,marginLeft:"auto",textAlign:"center",maxWidth:"35%",overflowWrap:"anywhere"}}>{group.name}</span>}</div>
+        <div style={{display:"flex",alignItems:"center",gap:12}}><div style={{background:C.pale,borderRadius:12,width:48,height:48,flexShrink:0,display:"grid",placeItems:"center",overflow:"hidden"}}>{photo?<button type="button" aria-label="Ampliar fotografía" onClick={()=>setPreview(photo)} style={{border:0,padding:0,width:48,height:48,background:"none",cursor:"pointer"}}><img src={photo} alt={exercise?.name??"Ejercicio"} style={{width:"100%",height:"100%",objectFit:"cover"}}/></button>:<Dumbbell size={22} color={C.dark}/>}</div><div style={{flex:1,minWidth:0}}><div style={{display:"flex",alignItems:"center",flexWrap:"wrap",gap:6,fontWeight:600,fontSize:14}}><span>{i+1}. {exercise?.name ?? "Ejercicio"}</span></div><div style={{fontSize:12,color:C.muted}}>{exercise?.equipment ?? "Sin equipamiento indicado"}{exercise && !exercise.is_active ? " · Archivado" : ""}</div></div>{group&&<span style={{fontSize:10,fontWeight:600,borderRadius:6,padding:"4px 8px",background:group.color+"22",color:C.text,flexShrink:0,marginLeft:"auto",textAlign:"center",maxWidth:"35%",overflowWrap:"anywhere"}}>{group.name}</span>}<button type="button" aria-label="Opciones del ejercicio" aria-expanded={menu===entry.id} onClick={()=>{setMenu(menu===entry.id?null:entry.id);setPanel(null);}} style={{...btn,background:"none",padding:4,flexShrink:0}}><EllipsisVertical size={19}/></button></div>
+        {menu===entry.id&&<div style={{...card,padding:8,display:"grid",gap:4}}>
+          {!readOnly&&<><button disabled={busy||i===0} style={{...btn,textAlign:"left",color:i===0?C.muted:C.dark}} onClick={()=>manage(entry,"up")}><ArrowUp size={15}/> Mover arriba</button><button disabled={busy||i===entries.length-1} style={{...btn,textAlign:"left",color:i===entries.length-1?C.muted:C.dark}} onClick={()=>manage(entry,"down")}><ArrowDown size={15}/> Mover abajo</button><button disabled={busy} style={{...btn,textAlign:"left"}} onClick={()=>void openReplacement(entry)}><Repeat size={15}/> Sustituir ejercicio</button><button style={{...btn,textAlign:"left"}} onClick={()=>{setEntryNotes(entry.notes??"");setEntryPain(entry.discomfort_notes??"");setPanel({id:entry.id,kind:"notes"});setMenu(null);}}><NotebookPen size={15}/> Observaciones</button></>}
+          <button style={{...btn,textAlign:"left"}} onClick={()=>{setPanel({id:entry.id,kind:"technique"});setMenu(null);}}><BookOpen size={15}/> Consultar técnica</button>
+          {!readOnly&&<button disabled={busy} style={{...btn,textAlign:"left",color:"#A33D3D",background:"none"}} onClick={()=>manage(entry,"delete")}><Trash2 size={15}/> Eliminar ejercicio</button>}
+        </div>}
+        {panel?.id===entry.id&&<div style={{...card,padding:12,display:"grid",gap:10}}><button style={{...btn,justifySelf:"end",padding:6}} onClick={()=>setPanel(null)}><X size={16}/> Cerrar</button>
+          {panel.kind==="technique"&&<><strong>Técnica del ejercicio</strong><div style={{whiteSpace:"pre-wrap",fontSize:13}}>{exercise?.technique_notes||"Sin indicaciones técnicas."}</div>{exercise?.description&&<div style={{whiteSpace:"pre-wrap",fontSize:13}}>{exercise.description}</div>}</>}
+          {panel.kind==="notes"&&<><label>Observaciones<textarea style={{...field,textAlign:"left"}} rows={3} value={entryNotes} onChange={e=>setEntryNotes(e.target.value)}/></label><label>Molestias<textarea style={{...field,textAlign:"left"}} rows={2} value={entryPain} onChange={e=>setEntryPain(e.target.value)}/></label><button disabled={busy} style={btn} onClick={()=>saveEntryNotes(entry)}>Guardar observaciones</button></>}
+          {panel.kind==="replace"&&<><strong>Sustituir ejercicio</strong><input style={{...field,textAlign:"left"}} placeholder="Buscar ejercicio" value={search} onChange={e=>setSearch(e.target.value)}/><select style={field} value={groupFilter} onChange={e=>setGroupFilter(e.target.value)}><option value="">Todos los grupos</option>{Array.from(new Set(library.filter(e=>e.is_active).map(e=>groups[e.id]?.name).filter(Boolean))).sort().map(name=><option key={name}>{name}</option>)}</select>{[true,false].map(linked=>{const list=filtered.filter(e=>e.id!==entry.exercise_id&&variants.includes(e.id)===linked);return list.length>0&&<div key={String(linked)} style={{display:"grid",gap:6}}><small>{linked?"Variantes vinculadas":"Otros ejercicios"}</small>{list.map(e=><button key={e.id} disabled={busy} style={{...btn,textAlign:"left"}} onClick={()=>manage(entry,"replace",e.id)}>{e.name} · {e.equipment??""}</button>)}</div>})}</>}
+        </div>}
+        {entry.notes&&<small style={{whiteSpace:"pre-wrap",color:C.muted}}>Observaciones: {entry.notes}</small>}{entry.discomfort_notes&&<small style={{whiteSpace:"pre-wrap",color:C.muted}}>Molestias: {entry.discomfort_notes}</small>}
         {prev&&<div style={{display:"flex",flexWrap:"wrap",alignItems:"center",gap:6,fontSize:11,color:C.muted}}><span>Anterior: {prev.date.split("-").reverse().join("/")} · Máx. {Math.max(0,...prev.rows.filter(r=>r.set_type==="working").map(r=>r.weight_kg??0))} kg</span>{!readOnly&&<button style={{...btn,padding:6,marginLeft:"auto"}} onClick={()=>copyPrevious(entry)}>Copiar series</button>}</div>}
         {!prev&&!readOnly&&<small style={{color:C.muted}}>Sin referencia anterior disponible.</small>}
         {rows.length>0 && <div style={{display:"grid",gridTemplateColumns:columns,gap:5,alignItems:"center",fontSize:11,color:C.muted,textAlign:"center"}}><span>Serie</span>{prev&&<span>Anterior</span>}<span>Kg</span><span>Reps</span><span>Hecha</span><span/></div>}
@@ -233,7 +279,7 @@ export default function StrengthSession({ sessionId, onBack }: { sessionId: stri
         {rows.length>0 && <small style={{color:C.muted}}>A = aproximación. Pulsa el número para cambiar el tipo.{unilateral&&!readOnly&&" Pulsa Ambos para separar los lados."}</small>}
         {session.status!=="completed" && <button type="button" style={{...btn,display:"flex",alignItems:"center",justifyContent:"center",gap:6}} onClick={()=>addSet(entry,"both")}><Plus size={16}/> Añadir serie</button>}
       </section>})}
-      {session.status !== "completed" && !picker && <button type="button" style={{...btn,display:"flex",alignItems:"center",justifyContent:"center",gap:8}} onClick={()=>{setPicker(true);setSearch("");setGroupFilter("");}}><Plus size={18}/> Añadir ejercicio</button>}
+      {session.status !== "completed" && !picker && <button type="button" style={{...btn,display:"flex",alignItems:"center",justifyContent:"center",gap:8}} onClick={()=>{setPanel(null);setMenu(null);setPicker(true);setSearch("");setGroupFilter("");}}><Plus size={18}/> Añadir ejercicio</button>}
       {picker && <section style={{...card,display:"flex",flexDirection:"column",gap:12}}><div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}><strong style={{fontSize:15}}>Seleccionar ejercicio</strong><button type="button" disabled={busy} style={{...btn,display:"flex",alignItems:"center",gap:6}} onClick={()=>setPicker(false)}><X size={16}/> Cerrar</button></div><input aria-label="Buscar ejercicio" placeholder="Buscar ejercicio o equipamiento" value={search} onChange={e=>setSearch(e.target.value)} style={{fontFamily:"inherit",fontSize:16,padding:12,border:`1px solid ${C.border}`,borderRadius:12,width:"100%",boxSizing:"border-box"}}/><select aria-label="Filtrar por grupo muscular" value={groupFilter} onChange={e=>setGroupFilter(e.target.value)} style={{...field,textAlign:"left",padding:12,borderRadius:12}}><option value="">Todos los grupos musculares</option>{Array.from(new Set(library.filter(e=>e.is_active).map(e=>groups[e.id]?.name).filter(Boolean))).sort((a,b)=>a.localeCompare(b,"es")).map(name=><option key={name} value={name}>{name}</option>)}</select>{filtered.length===0 && <p style={{fontSize:13,color:C.muted}}>No hay ejercicios disponibles.</p>}{filtered.map(e=><button type="button" key={e.id} disabled={busy} onClick={()=>void add(e)} style={{...btn,background:"#fff",border:`1px solid ${C.border}`,display:"flex",alignItems:"center",textAlign:"left",gap:10}}><div style={{flex:1}}>{e.name}<div style={{fontSize:11,fontWeight:400,color:C.muted}}>{e.equipment ?? ""}</div></div><Plus size={18}/></button>)}</section>}
       {session.status!=="completed"&&<section style={{...card,display:"flex",flexDirection:"column",gap:10}}><strong>Finalizar entrenamiento</strong><label>Duración (minutos)<input style={field} inputMode="numeric" value={duration} onChange={e=>setDuration(e.target.value)}/></label><label>Calorías activas (opcional)<input style={field} inputMode="decimal" value={calories} onChange={e=>setCalories(e.target.value)}/></label><label>Sensaciones y observaciones<textarea style={{...field,textAlign:"left"}} rows={2} value={notes} onChange={e=>setNotes(e.target.value)}/></label><label>Molestias (opcional)<textarea style={{...field,textAlign:"left"}} rows={2} value={discomfort} onChange={e=>setDiscomfort(e.target.value)}/></label><button type="button" disabled={closing||busy} style={{...btn,background:C.green,color:"white"}} onClick={()=>void closeSession()}>Finalizar entrenamiento</button></section>}
       <button type="button" disabled={closing||busy} style={{...btn,background:"none",color:"#A33D3D"}} onClick={()=>void closeSession(true)}>Eliminar entrenamiento</button>
