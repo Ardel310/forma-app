@@ -9,7 +9,7 @@ import StrengthSessionForm from "./StrengthSessionForm";
 import StrengthSession from "./StrengthSession";
 import StrengthSessionSummary from "./StrengthSessionSummary";
 
-type Session = { id: string; name: string; session_date: string; status: string; duration_minutes: number | null };
+type Session = { id: string; name: string; session_date: string; status: string; duration_minutes: number | null; active_calories: number | null };
 type Group = {id:string;name:string;color:string};
 function todayMadrid(){return new Intl.DateTimeFormat("en-CA",{timeZone:"Europe/Madrid",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());}
 function shift(date:string,days:number){const d=new Date(date+"T12:00:00Z");d.setUTCDate(d.getUTCDate()+days);return d.toISOString().slice(0,10);}
@@ -41,7 +41,7 @@ export default function StrengthTraining({ onBack }: { onBack: () => void }) {
   const today=todayMadrid(), monday=weekStart(today), sunday=shift(monday,6);
   const weekly=sessions.filter(s=>s.session_date>=monday&&s.session_date<=sunday);
   const groups=Array.from(new Map(Object.values(groupMap).flat().map(g=>[g.id,g])).values()).sort((a,b)=>a.name.localeCompare(b.name,"es"));
-  const cutoff=period==="week"?monday:period==="month"?today.slice(0,7)+"-01":period==="3m"||period==="6m"?shift(today,period==="3m"?-90:-180):period==="custom"?from:"";
+  const cutoff=period==="week"?monday:period==="month"?today.slice(0,7)+"-01":period==="3m"||period==="6m"?shift(today,period==="3m"?-90:-180):period==="year"?shift(today,-365):period==="custom"?from:"";
   const visible=sessions.filter(s=>s.name.toLocaleLowerCase("es").includes(search.trim().toLocaleLowerCase("es"))&&(!group||(groupMap[s.id]??[]).some(g=>g.id===group))&&(!cutoff||s.session_date>=cutoff)&&(period!=="custom"||!to||s.session_date<=to));
   async function duplicate(){
     if(!source||duplicating)return;
@@ -57,7 +57,7 @@ export default function StrengthTraining({ onBack }: { onBack: () => void }) {
       try {
         const { data: auth, error: authError } = await supabase.auth.getUser();
         if (authError || !auth.user) throw new Error("No se ha podido comprobar tu sesión.");
-        const fields = "id,name,session_date,status,duration_minutes";
+        const fields = "id,name,session_date,status,duration_minutes,active_calories";
         const all:Session[]=[];
         for(let offset=0;;offset+=500){const r=await supabase.from("training_sessions").select(fields).eq("user_id",auth.user.id).eq("status","completed").order("session_date",{ascending:false}).order("created_at",{ascending:false}).order("id").range(offset,offset+499);if(r.error)throw r.error;all.push(...(r.data??[]));if((r.data??[]).length<500)break;}
         const [unfinished] = await Promise.all([
@@ -89,9 +89,15 @@ export default function StrengthTraining({ onBack }: { onBack: () => void }) {
   ];
   function openSession(id: string) { setSelectedId(id); window.scrollTo({ top: 0 }); }
   const completedSelection=sessions.find(s=>s.id===selectedId);
-  if(selectedId && completedSelection) return <StrengthSessionSummary key={selectedId} sessionId={selectedId} onBack={()=>{setSelectedId(null);open("home");}} onRepeat={()=>{setSelectedId(null);open("repeat");setSource(completedSelection);setName(completedSelection.name);setDate(today);setDuplicateError("");}}/>;
+  if(selectedId && completedSelection) return <StrengthSessionSummary key={selectedId} sessionId={selectedId} onBack={()=>{setSelectedId(null);window.scrollTo({top:0});}} onRepeat={()=>{setSelectedId(null);open("repeat");setSource(completedSelection);setName(completedSelection.name);setDate(today);setDuplicateError("");}}/>;
   if (selectedId) return <StrengthSession key={selectedId} sessionId={selectedId} onBack={() => { setSelectedId(null); setRetry(n => n + 1); open("home"); }} />;
   if (view === "new") return <StrengthSessionForm onBack={() => open("home")} onCreated={(id) => { setRetry(n => n + 1); open("home"); openSession(id); }} />;
+  const months=Array.from(new Set(visible.map(s=>s.session_date.slice(0,7))));
+  const totalMinutes=visible.reduce((n,s)=>n+(s.duration_minutes??0),0);
+  const totalCalories=visible.reduce((n,s)=>n+(s.active_calories??0),0);
+  const number=(n:number)=>n.toLocaleString("es-ES",{maximumFractionDigits:1});
+  function selectSource(s:Session){setSource(s);setName(s.name);setDate(today);setDuplicateError("");window.scrollTo({top:0});}
+  function sessionCard(s:Session,repeat=false){return <button type="button" key={s.id} onClick={()=>repeat?selectSource(s):openSession(s.id)} style={{...button,...card,padding:10,borderRadius:12,display:"flex",alignItems:"center",gap:8,minWidth:0}}><span style={{flex:1,minWidth:0,display:"grid",gap:4}}><strong style={{fontSize:13,fontWeight:600,overflowWrap:"anywhere"}}>{s.name}</strong><span style={{fontSize:11,color:C.muted}}>{dateLabel(s.session_date)}{s.duration_minutes!=null?` · ${s.duration_minutes} min`:""}{s.active_calories!=null?` · ${number(s.active_calories)} kcal`:""}</span>{(groupMap[s.id]??[]).length>0&&<span style={{display:"flex",flexWrap:"wrap",gap:4}}>{(groupMap[s.id]??[]).map(g=><span key={g.id} style={{background:g.color+"22",borderRadius:5,padding:"2px 5px",fontSize:10,color:C.text}}>{g.name}</span>)}</span>}</span>{repeat?<Copy size={17} color={C.dark} style={{flexShrink:0}}/>:<ChevronRight size={17} color={C.green} style={{flexShrink:0}}/>}</button>}
   const field:CSSProperties={width:"100%",boxSizing:"border-box",fontFamily:"inherit",fontSize:16,padding:12,border:`1px solid ${C.border}`,borderRadius:12,background:C.white,color:C.text,minWidth:0};
   const smallButton:CSSProperties={...button,width:"auto",border:0,borderRadius:10,padding:10,background:C.pale,color:C.dark,fontWeight:600};
   return <section style={{ display: "grid", gap: 14, color: C.text }}>
@@ -104,14 +110,14 @@ export default function StrengthTraining({ onBack }: { onBack: () => void }) {
       {view === "home" ? "Entrenamiento" : "Fuerza"}
     </button>
     <h2 style={{ margin: "4px 0 0", fontSize: 23, fontWeight: 600, color: C.text }}>{view === "home" ? "Fuerza" : labels[view]}</h2>
-    {view !== "home" ? <div style={view === "continue" ? {display:"grid",gap:10} : card}>
-      {view === "repeat" ? <div style={{display:"grid",gap:12}}>
+    {view !== "home" ? <div style={{display:"grid",gap:8}}>
+      {(view === "repeat" || view === "history") ? <div style={{display:"grid",gap:8}}>
       {source?<><strong>Repetir {source.name}</strong><label>Nombre<input style={field} value={name} onChange={e=>setName(e.target.value)}/></label><label>Fecha<input type="date" max={today} style={field} value={date} onChange={e=>setDate(e.target.value)}/></label>{duplicateError&&<p role="alert">{duplicateError}</p>}<button style={{...smallButton,background:C.green,color:C.white,textAlign:"center"}} disabled={duplicating} onClick={()=>void duplicate()}>{duplicating?"Duplicando…":"Comenzar entrenamiento"}</button><button style={smallButton} disabled={duplicating} onClick={()=>setSource(null)}>Cancelar</button></>:<>
       <input style={field} placeholder="Buscar entrenamiento…" value={search} onChange={e=>setSearch(e.target.value)}/>
       <select style={field} aria-label="Grupo muscular" value={group} onChange={e=>setGroup(e.target.value)}><option value="">Todos los grupos musculares</option>{groups.map(g=><option key={g.id} value={g.id}>{g.name}</option>)}</select>
-      <select style={field} aria-label="Fecha" value={period} onChange={e=>setPeriod(e.target.value)}>{[["all","Todas las fechas"],["week","Esta semana"],["month","Este mes"],["3m","Últimos 90 días"],["6m","Últimos 180 días"],["custom","Personalizado"]].map(([v,l])=><option key={v} value={v}>{l}</option>)}</select>
+      <select style={field} aria-label="Fecha" value={period} onChange={e=>setPeriod(e.target.value)}>{[["all","Todas las fechas"],["week","Esta semana"],["month","Este mes"],["3m","Últimos 90 días"],["6m","Últimos 180 días"],["year","Últimos 365 días"],["custom","Personalizado"]].map(([v,l])=><option key={v} value={v}>{l}</option>)}</select>
       {period==="custom"&&<><label>Desde<input type="date" style={field} value={from} onChange={e=>setFrom(e.target.value)}/></label><label>Hasta<input type="date" style={field} value={to} onChange={e=>setTo(e.target.value)}/></label></>}
-      {loading?<p>Cargando…</p>:error?<><p role="alert">{error}</p><button style={smallButton} onClick={()=>setRetry(n=>n+1)}>Reintentar</button></>:<><small style={{color:C.muted}}>{visible.length} entrenamientos</small>{visible.map(s=><div key={s.id} style={{...card,display:"grid",gap:8}}><strong>{s.name}</strong><small style={{color:C.muted}}>{dateLabel(s.session_date)}{s.duration_minutes!=null?` · ${s.duration_minutes} min`:""}</small><div style={{display:"flex",flexWrap:"wrap",gap:5}}>{(groupMap[s.id]??[]).map(g=><span key={g.id} style={{background:g.color+"22",borderRadius:6,padding:"3px 7px",fontSize:11}}>{g.name}</span>)}</div><button style={{...smallButton,justifySelf:"end",display:"flex",alignItems:"center",gap:6}} onClick={()=>{setSource(s);setName(s.name);setDate(today);setDuplicateError("");}}><Copy size={15}/> Repetir</button></div>)}</>}
+      {loading?<p>Cargando…</p>:error?<><p role="alert">{error}</p><button style={smallButton} onClick={()=>setRetry(n=>n+1)}>Reintentar</button></>:<>{view==="history"?<><div style={{display:"grid",gridTemplateColumns:"repeat(3,minmax(0,1fr))",gap:6}}>{[[String(visible.length),"Entrenos"],[visible.some(s=>s.duration_minutes!=null)?`${Math.floor(totalMinutes/60)} h ${totalMinutes%60} min`:"—","Duración"],[visible.some(s=>s.active_calories!=null)?number(totalCalories):"—","Kcal activas"]].map(([value,label])=><div key={label} style={{background:C.pale,borderRadius:10,padding:8,minWidth:0}}><strong style={{fontSize:15,overflowWrap:"anywhere"}}>{value}</strong><div style={{fontSize:10,color:C.muted}}>{label}</div></div>)}</div><small style={{color:C.muted}}>Totales de los datos registrados.</small>{months.map(month=><div key={month} style={{display:"grid",gap:6}}><h3 style={{fontSize:13,fontWeight:600,margin:"6px 0 0",textTransform:"capitalize"}}>{new Date(month+"-01T12:00:00").toLocaleDateString("es-ES",{month:"long",year:"numeric"})}</h3>{visible.filter(s=>s.session_date.startsWith(month)).map(s=>sessionCard(s))}</div>)}</>:<><small style={{color:C.muted}}>{visible.length} entrenamientos</small>{visible.map(s=>sessionCard(s,true))}</>}{!visible.length&&<p style={{fontSize:13,color:C.muted}}>No hay entrenamientos con estos filtros.</p>}</>}
       </>}
       </div> : view === "continue" ? <>
         {loading ? <p>Cargando sesiones…</p> : error ? <><p role="alert">{error}</p><button type="button" onClick={() => setRetry(n => n + 1)}>Reintentar</button></> : pending.length === 0 ? <p style={{ fontSize: 13, color: C.muted }}>No hay sesiones pendientes.</p> : <>
@@ -129,7 +135,7 @@ export default function StrengthTraining({ onBack }: { onBack: () => void }) {
         <span style={{ flex: 1, minWidth: 0, display: "grid", gap: 4 }}><strong style={{ fontSize: 14, fontWeight: 600 }}>{labels[key]}</strong><span style={{ color: C.muted, fontSize: 12 }}>{description}</span></span><ChevronRight size={19} color={C.green} style={{ flexShrink: 0 }}/>
       </button>)}
       <h3 style={{ margin: "8px 0 0", fontSize: 16, fontWeight: 600 }}>Entrenamientos de esta semana</h3>
-      {loading ? <div style={card}>Cargando entrenamientos…</div> : error ? <div style={card}><p role="alert" style={{ fontSize: 13 }}>{error}</p><button type="button" onClick={() => setRetry(n => n + 1)} style={{ ...button, border: 0, background: C.pale, borderRadius: 10, padding: 10 }}>Reintentar</button></div> : weekly.length === 0 ? <div style={{ ...card, textAlign: "center", color: C.muted, padding: 24 }}><Dumbbell size={28} color={C.green}/><p style={{ fontSize: 13, margin: "8px 0 0" }}>Todavía no hay entrenamientos finalizados esta semana.</p></div> : weekly.map(s => <button type="button" onClick={()=>openSession(s.id)} key={s.id} style={{...button,...card}}><strong style={{ fontSize: 14 }}>{s.name}</strong><div style={{ fontSize: 12, color: C.muted, marginTop: 5 }}>{dateLabel(s.session_date)}{s.duration_minutes != null ? ` · ${s.duration_minutes} min` : ""}</div></button>)}
+      {loading ? <div style={card}>Cargando entrenamientos…</div> : error ? <div style={card}><p role="alert" style={{ fontSize: 13 }}>{error}</p><button type="button" onClick={() => setRetry(n => n + 1)} style={{ ...button, border: 0, background: C.pale, borderRadius: 10, padding: 10 }}>Reintentar</button></div> : weekly.length === 0 ? <div style={{ ...card, textAlign: "center", color: C.muted, padding: 24 }}><Dumbbell size={28} color={C.green}/><p style={{ fontSize: 13, margin: "8px 0 0" }}>Todavía no hay entrenamientos finalizados esta semana.</p></div> : weekly.map(s=>sessionCard(s))}
     </>}
   </section>;
 }
