@@ -21,7 +21,6 @@ const soft: CSSProperties = { ...btn, background: C.pale, color: C.dark };
 const input: CSSProperties = { width: "100%", boxSizing: "border-box", minWidth: 0, padding: 12, border: `1px solid ${C.border}`, borderRadius: 11, fontFamily: "inherit", fontSize: 16, color: C.text, background: C.white };
 const heading: CSSProperties = { fontSize: 15, margin: 0, fontWeight: 600 };
 const muted: CSSProperties = { fontSize: 12, color: C.muted, margin: 0, lineHeight: 1.7 };
-const normalize = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
 const message = (e: unknown) => (e as { message?: string })?.message || "No se pudo completar la operación.";
 
 export default function ExerciseDetail({ exercise, onBack, onEdit, onOpenExercise, onChanged }: Props) {
@@ -36,7 +35,6 @@ export default function ExerciseDetail({ exercise, onBack, onEdit, onOpenExercis
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [picker, setPicker] = useState(false);
-  const [search, setSearch] = useState("");
   const [variantId, setVariantId] = useState("");
   const [notes, setNotes] = useState("");
   const id = exercise.id;
@@ -69,7 +67,7 @@ export default function ExerciseDetail({ exercise, onBack, onEdit, onOpenExercis
   },[supabase,id]);
   useEffect(() => { void load(); },[load]);
   const linkedIds = new Set(variants.map(v => v.exercise_id === id ? v.variant_id : v.exercise_id));
-  const candidates = library.filter(e => e.id !== id && e.is_active && !linkedIds.has(e.id) && normalize([e.name,e.equipment].filter(Boolean).join(" ")).includes(normalize(search)));
+  const candidates = library.filter(e => e.id !== id && e.is_active && !linkedIds.has(e.id));
   async function changeFlag(field: "is_active" | "is_favorite") {
     if (busy || loading) return;
     if (field === "is_active" && !window.confirm(item.is_active ? "¿Desactivar este ejercicio? Se conservará su histórico." : "¿Reactivar este ejercicio?")) return;
@@ -86,7 +84,7 @@ export default function ExerciseDetail({ exercise, onBack, onEdit, onOpenExercis
     try {
       const {error} = await supabase.from("exercise_variants").insert({exercise_id:id,variant_id:variantId,notes:notes.trim() || null});
       if (error) throw error;
-      setPicker(false); setVariantId(""); setSearch(""); setNotes(""); await load();
+      setPicker(false); setVariantId("");  setNotes(""); await load();
     } catch(e) { setError(message(e)); } finally { setBusy(false); }
   }
   async function removeVariant(v: Variant) {
@@ -113,8 +111,8 @@ export default function ExerciseDetail({ exercise, onBack, onEdit, onOpenExercis
       <section style={card}>{photo(item)}<div style={{display:"flex",flexWrap:"wrap",gap:7}}>{[item.is_active?"Activo":"Desactivado",item.equipment,item.is_unilateral?"Unilateral":null].filter(Boolean).map((t,i)=><span key={i} style={{background:C.pale,color:C.dark,borderRadius:8,padding:"6px 9px",fontSize:11}}>{t}</span>)}</div><button type="button" style={btn} disabled={busy} onClick={onEdit}><Pencil size={17}/> Editar ejercicio</button></section>
       <section style={card}><h3 style={heading}>Grupos musculares</h3>{[...relations].sort((a,b)=>Number(b.is_primary)-Number(a.is_primary)).map(r=>{const g=groups.find(g=>g.id===r.muscle_group_id);return <div key={r.muscle_group_id} style={{display:"flex",alignItems:"center",gap:8,fontSize:12}}><span style={{width:10,height:10,borderRadius:"50%",background:g?.color??C.green,flexShrink:0}}/><span style={{flex:1}}>{g?.name??"Grupo no disponible"}{g&&!g.is_active?" (desactivado)":""}</span><span style={muted}>{r.is_primary?"Principal":"Secundario"}</span></div>})}{!relations.length&&<p style={muted}>Sin grupos asignados.</p>}</section>
       <section style={card}><h3 style={heading}>Descripción</h3><p style={{...muted,whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>{item.description||"Sin descripción."}</p><div style={{height:1,background:C.border}}/><h3 style={{...heading,display:"flex",gap:8,alignItems:"center"}}><ClipboardList size={18} color={C.green}/> Observaciones técnicas</h3><div style={{background:C.pale,borderRadius:12,padding:12,fontSize:12,lineHeight:1.7,whiteSpace:"pre-wrap",overflowWrap:"anywhere"}}>{item.technique_notes||"Sin observaciones técnicas."}</div></section>
-      <section style={card}><div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}><h3 style={heading}>Variantes del ejercicio</h3><button type="button" style={soft} disabled={busy} onClick={()=>{setPicker(!picker);setVariantId("");setSearch("");setNotes("");}}>{picker?<X size={16}/>:<Plus size={16}/>} {picker?"Cerrar":"Añadir"}</button></div><p style={muted}>Cada variante conserva su propio histórico y rendimiento.</p>
-      {picker&&<div style={{display:"grid",gap:9,background:C.pale,borderRadius:12,padding:12}}><input style={input} placeholder="Buscar ejercicio..." aria-label="Buscar variante" value={search} disabled={busy} onChange={e=>{setSearch(e.target.value);setVariantId("");}}/><select style={input} aria-label="Seleccionar variante" value={variantId} disabled={busy} onChange={e=>setVariantId(e.target.value)}><option value="">Seleccionar ejercicio</option>{candidates.map(e=><option key={e.id} value={e.id}>{[e.name,e.equipment].filter(Boolean).join(" · ")}</option>)}</select>{!candidates.length&&<p style={muted}>No hay ejercicios disponibles. Crea otro ejercicio activo en la biblioteca para vincularlo.</p>}<textarea style={input} rows={2} placeholder="Notas de la variante (opcional)" value={notes} disabled={busy} onChange={e=>setNotes(e.target.value)}/><button type="button" style={btn} disabled={busy||!variantId} onClick={()=>void addVariant()}>Vincular variante</button></div>}
+      <section style={card}><div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}}><h3 style={heading}>Variantes del ejercicio</h3><button type="button" style={soft} disabled={busy} onClick={()=>{setPicker(!picker);setVariantId("");setNotes("");}}>{picker?<X size={16}/>:<Plus size={16}/>} {picker?"Cerrar":"Añadir"}</button></div><p style={muted}>Cada variante conserva su propio histórico y rendimiento.</p>
+      {picker&&<div style={{display:"grid",gap:9,background:C.pale,borderRadius:12,padding:12}}><select style={input} aria-label="Seleccionar variante" value={variantId} disabled={busy} onChange={e=>setVariantId(e.target.value)}><option value="">Seleccionar ejercicio</option>{candidates.map(e=><option key={e.id} value={e.id}>{[e.name,e.equipment].filter(Boolean).join(" · ")}</option>)}</select>{!candidates.length&&<p style={muted}>No hay ejercicios disponibles. Crea otro ejercicio activo en la biblioteca para vincularlo.</p>}<textarea style={input} rows={2} placeholder="Notas de la variante (opcional)" value={notes} disabled={busy} onChange={e=>setNotes(e.target.value)}/><button type="button" style={btn} disabled={busy||!variantId} onClick={()=>void addVariant()}>Vincular variante</button></div>}
       {!variants.length&&<p style={muted}>Todavía no hay variantes vinculadas.</p>}
       {variants.map(v=>{const other=library.find(e=>e.id===(v.exercise_id===id?v.variant_id:v.exercise_id));return <div key={v.id} style={{border:`1px solid ${C.border}`,borderRadius:12,padding:10,display:"grid",gap:8}}><div style={{display:"flex",alignItems:"center",gap:8}}>{other?<button type="button" disabled={busy} onClick={()=>onOpenExercise(other)} style={{display:"flex",alignItems:"center",gap:9,flex:1,minWidth:0,background:"transparent",border:0,padding:0,textAlign:"left",fontFamily:"inherit",color:C.text}}>{photo(other,true)}<span style={{flex:1,minWidth:0,overflowWrap:"anywhere"}}><strong style={{fontSize:12}}>{other.name}</strong><span style={{...muted,display:"block"}}>{[other.equipment,!other.is_active?"Desactivado":null].filter(Boolean).join(" · ")}</span></span><ChevronRight size={16} color={C.green}/></button>:<span style={muted}>Variante no disponible</span>}<button type="button" style={{...soft,padding:8,color:C.danger}} aria-label="Desvincular variante" disabled={busy} onClick={()=>void removeVariant(v)}><X size={17}/></button></div>{v.notes&&<p style={{...muted,whiteSpace:"pre-wrap"}}>{v.notes}</p>}</div>})}</section>
       <section style={card}><h3 style={{...heading,display:"flex",alignItems:"center",gap:8}}><ChartNoAxesCombined size={18} color={C.green}/> Rendimiento</h3><div style={{display:"grid",gridTemplateColumns:"repeat(2,minmax(0,1fr))",gap:8}}>{["Último peso","Récord personal","Entrenamientos","Última sesión"].map(t=><div key={t} style={{background:C.pale,borderRadius:12,padding:12}}><p style={muted}>{t}</p><strong style={{fontSize:22,color:C.dark}}>—</strong></div>)}</div><p style={muted}>Disponible cuando incorporemos el registro de entrenamientos y la evolución individual.</p></section>
