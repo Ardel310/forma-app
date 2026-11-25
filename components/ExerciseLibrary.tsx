@@ -102,6 +102,17 @@ const input: CSSProperties = {
   fontSize: 12,
 };
 
+const selectInput: CSSProperties = {
+  ...input,
+  appearance: "none",
+  WebkitAppearance: "none",
+  paddingRight: 36,
+  backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23596B60' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")`,
+  backgroundRepeat: "no-repeat",
+  backgroundPosition: "right 14px center",
+  backgroundSize: "16px 16px",
+};
+
 function normalize(value: string) {
   return value
     .normalize("NFD")
@@ -272,8 +283,6 @@ export default function ExerciseLibrary({
       if (statusFilter === "active" && !exercise.is_active)
         return false;
 
-      if (statusFilter === "inactive" && exercise.is_active)
-        return false;
 
       if (favoritesOnly && !exercise.is_favorite)
         return false;
@@ -554,11 +563,14 @@ export default function ExerciseLibrary({
         </button>
       </div>
 
+      <div style={{display:"flex",alignItems:"center",gap:10}}>
       <div
         style={{
           display: "flex",
           alignItems: "center",
           gap: 9,
+          flex: 1,
+          minWidth: 0,
           background: C.white,
           border: `1px solid ${C.border}`,
           borderRadius: 12,
@@ -597,6 +609,17 @@ export default function ExerciseLibrary({
         )}
       </div>
 
+        <button type="button" role="switch" aria-label="Mostrar solo ejercicios activos"
+          aria-checked={statusFilter === "active"}
+          onClick={() => setStatusFilter(value => value === "active" ? "all" : "active")}
+          style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:3,minWidth:62,minHeight:44,flexShrink:0,border:0,background:"transparent",color:C.dark,fontFamily:"inherit",fontSize:10,cursor:"pointer"}}>
+          <span style={{display:"flex",alignItems:"center",justifyContent:statusFilter === "active" ? "flex-end" : "flex-start",width:40,height:24,padding:3,boxSizing:"border-box",borderRadius:20,background:statusFilter === "active" ? C.green : "#DCE2DD"}}>
+            <span style={{width:18,height:18,borderRadius:"50%",background:C.white,boxShadow:"0 1px 4px rgba(0,0,0,.12)"}} />
+          </span>
+          {statusFilter === "active" ? "Activos" : "Todos"}
+        </button>
+      </div>
+
       <div
         style={{
           display: "grid",
@@ -608,7 +631,7 @@ export default function ExerciseLibrary({
           aria-label="Grupo muscular"
           value={groupFilter}
           onChange={(e) => setGroupFilter(e.target.value)}
-          style={input}
+          style={selectInput}
         >
           <option value="all">Grupo muscular</option>
 
@@ -624,7 +647,7 @@ export default function ExerciseLibrary({
           aria-label="Equipamiento"
           value={equipmentFilter}
           onChange={(e) => setEquipmentFilter(e.target.value)}
-          style={input}
+          style={selectInput}
         >
           <option value="all">Equipamiento</option>
 
@@ -635,16 +658,7 @@ export default function ExerciseLibrary({
           ))}
         </select>
 
-        <select
-          aria-label="Estado del ejercicio"
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          style={{ ...input, gridColumn: "1 / -1" }}
-        >
-          <option value="active">Activos</option>
-          <option value="inactive">Desactivados</option>
-          <option value="all">Todos los estados</option>
-        </select>
+
       </div>
 
       <div
