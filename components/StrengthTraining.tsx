@@ -48,10 +48,15 @@ export default function StrengthTraining({ onBack }: { onBack: () => void }) {
     { key: "history" as const, Icon: History, description: "Consulta tus entrenamientos." },
   ];
   return <section style={{ display: "grid", gap: 14, color: C.text }}>
-    <header style={{ display: "flex", alignItems: "center", gap: 12 }}>
-      <button type="button" aria-label="Volver" onClick={() => view === "home" ? onBack() : open("home")} style={{ border: 0, background: "transparent", color: C.dark, padding: 6, cursor: "pointer", display: "flex" }}><ArrowLeft size={23}/></button>
-      <h2 style={{ margin: 0, fontSize: 22, fontWeight: 600 }}>{view === "home" ? "Fuerza" : labels[view]}</h2>
-    </header>
+    <button
+      type="button"
+      onClick={() => view === "home" ? onBack() : open("home")}
+      style={{ display: "flex", alignItems: "center", gap: 8, background: "none", border: "none", padding: 0, color: C.dark, fontSize: 13, fontWeight: 600, fontFamily: "inherit", justifySelf: "start", cursor: "pointer" }}
+    >
+      <ArrowLeft size={18} />
+      {view === "home" ? "Entrenamiento" : "Fuerza"}
+    </button>
+    <h2 style={{ margin: "4px 0 0", fontSize: 23, fontWeight: 600, color: C.text }}>{view === "home" ? "Fuerza" : labels[view]}</h2>
     {view !== "home" ? <div style={card}><p style={{ margin: 0, fontSize: 14, color: C.muted }}>Esta funcionalidad se incorporará en los siguientes pasos del desarrollo.</p></div> : <>
       <p style={{ margin: 0, color: C.muted, fontSize: 13 }}>Registra tus entrenamientos y sigue tu evolución.</p>
       <button type="button" onClick={() => open("new")} style={{ ...button, border: 0, background: C.green, color: C.white, borderRadius: 18, padding: 20, display: "grid", gap: 10 }}>
