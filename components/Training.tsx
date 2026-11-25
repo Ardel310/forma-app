@@ -13,6 +13,7 @@ import {
   ArrowLeft,
 } from "lucide-react";
 import ExerciseLibrary from "./ExerciseLibrary";
+import StrengthTraining from "./StrengthTraining";
 
 type TrainingView =
   | "home"
@@ -87,6 +88,15 @@ export default function Training() {
   const selected = sections.find(
     (section) => section.id === view
   );
+
+  // MÓDULO DE FUERZA
+  if (view === "strength") {
+    return (
+      <StrengthTraining
+        onBack={() => openView("home")}
+      />
+    );
+  }
 
   // BIBLIOTECA DE EJERCICIOS
   if (view === "exercises") {
