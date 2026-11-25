@@ -280,6 +280,7 @@ export default function HomePage() {
   const supabase = useMemo(() => createClient(), []);
 
   const [section, setSection] = useState<Section>("home");
+  const [navigationKey, setNavigationKey] = useState(0);
   const [libraryView, setLibraryView] = useState<"plans" | "catalog">("plans");
   function openLibraryView(view: "plans" | "catalog") {
     setLibraryView(view);
@@ -432,6 +433,8 @@ export default function HomePage() {
   }, [loadMeals, refreshKey]);
 
   function navigate(destination: Section) {
+    if (savingOption || busyDetail || duplicating) return;
+    setNavigationKey(value => value + 1);
     setSection(destination);
     setLibraryView("plans");
     setShowShopping(false);
@@ -1526,16 +1529,16 @@ export default function HomePage() {
                   <Apple size={17} strokeWidth={1.7}/> Catálogo
                 </button>
               </div>
-              <NutritionPlans />
+              <NutritionPlans key={navigationKey} />
             </>
           )
         )}
 
         {/* MI PROGRESO */}
-        {section === "progress" && <BodyProgress />}
+        {section === "progress" && <BodyProgress key={navigationKey} />}
 
         {/* ENTRENAMIENTO */}
-        {section === "training" && <Training />}
+        {section === "training" && <Training key={navigationKey} />}
       </div>
 
       {/* NAVEGACIÓN INFERIOR */}
