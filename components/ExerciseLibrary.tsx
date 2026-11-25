@@ -129,7 +129,6 @@ export default function ExerciseLibrary({
   const [search, setSearch] = useState("");
   const [groupFilter, setGroupFilter] = useState("all");
   const [equipmentFilter, setEquipmentFilter] = useState("all");
-  const [gymFilter, setGymFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("active");
   const [favoritesOnly, setFavoritesOnly] = useState(false);
 
@@ -252,18 +251,6 @@ export default function ExerciseLibrary({
     [exercises]
   );
 
-  const gymOptions = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          exercises
-            .map((item) => item.gym)
-            .filter((value): value is string => Boolean(value))
-        )
-      ).sort((a, b) => a.localeCompare(b, "es")),
-    [exercises]
-  );
-
   const filtered = useMemo(() => {
     const term = normalize(search);
 
@@ -276,7 +263,6 @@ export default function ExerciseLibrary({
         [
           exercise.name,
           exercise.equipment ?? "",
-          exercise.gym ?? "",
           ...exerciseGroups,
         ].join(" ")
       );
@@ -299,12 +285,6 @@ export default function ExerciseLibrary({
         return false;
 
       if (
-        gymFilter !== "all" &&
-        exercise.gym !== gymFilter
-      )
-        return false;
-
-      if (
         groupFilter !== "all" &&
         !relations.some(
           (r) =>
@@ -323,7 +303,6 @@ export default function ExerciseLibrary({
     search,
     groupFilter,
     equipmentFilter,
-    gymFilter,
     statusFilter,
     favoritesOnly,
   ]);
@@ -332,7 +311,6 @@ export default function ExerciseLibrary({
     setSearch("");
     setGroupFilter("all");
     setEquipmentFilter("all");
-    setGymFilter("all");
     setStatusFilter("active");
     setFavoritesOnly(false);
   }
@@ -482,7 +460,6 @@ export default function ExerciseLibrary({
     search !== "" ||
     groupFilter !== "all" ||
     equipmentFilter !== "all" ||
-    gymFilter !== "all" ||
     statusFilter !== "active" ||
     favoritesOnly;
 
@@ -659,25 +636,10 @@ export default function ExerciseLibrary({
         </select>
 
         <select
-          aria-label="Gimnasio"
-          value={gymFilter}
-          onChange={(e) => setGymFilter(e.target.value)}
-          style={input}
-        >
-          <option value="all">Todos los gimnasios</option>
-
-          {gymOptions.map((gym) => (
-            <option key={gym} value={gym}>
-              {gym}
-            </option>
-          ))}
-        </select>
-
-        <select
           aria-label="Estado del ejercicio"
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
-          style={input}
+          style={{ ...input, gridColumn: "1 / -1" }}
         >
           <option value="active">Activos</option>
           <option value="inactive">Desactivados</option>
@@ -945,18 +907,6 @@ export default function ExerciseLibrary({
                         }}
                       >
                         {exercise.equipment}
-                      </div>
-                    )}
-
-                    {exercise.gym && (
-                      <div
-                        style={{
-                          color: C.muted,
-                          fontSize: 10,
-                          marginTop: 3,
-                        }}
-                      >
-                        {exercise.gym}
                       </div>
                     )}
 
