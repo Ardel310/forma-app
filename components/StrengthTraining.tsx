@@ -7,6 +7,7 @@ import { createClient } from "../lib/supabase/client";
 
 import StrengthSessionForm from "./StrengthSessionForm";
 import StrengthSession from "./StrengthSession";
+import StrengthSessionSummary from "./StrengthSessionSummary";
 
 type Session = { id: string; name: string; session_date: string; status: string; duration_minutes: number | null };
 type Group = {id:string;name:string;color:string};
@@ -87,6 +88,8 @@ export default function StrengthTraining({ onBack }: { onBack: () => void }) {
     { key: "history" as const, Icon: History, description: "Consulta tus entrenamientos." },
   ];
   function openSession(id: string) { setSelectedId(id); window.scrollTo({ top: 0 }); }
+  const completedSelection=sessions.find(s=>s.id===selectedId);
+  if(selectedId && completedSelection) return <StrengthSessionSummary key={selectedId} sessionId={selectedId} onBack={()=>{setSelectedId(null);open("home");}} onRepeat={()=>{setSelectedId(null);open("repeat");setSource(completedSelection);setName(completedSelection.name);setDate(today);setDuplicateError("");}}/>;
   if (selectedId) return <StrengthSession key={selectedId} sessionId={selectedId} onBack={() => { setSelectedId(null); setRetry(n => n + 1); open("home"); }} />;
   if (view === "new") return <StrengthSessionForm onBack={() => open("home")} onCreated={(id) => { setRetry(n => n + 1); open("home"); openSession(id); }} />;
   const field:CSSProperties={width:"100%",boxSizing:"border-box",fontFamily:"inherit",fontSize:16,padding:12,border:`1px solid ${C.border}`,borderRadius:12,background:C.white,color:C.text,minWidth:0};
