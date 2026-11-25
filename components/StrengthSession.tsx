@@ -53,7 +53,15 @@ export default function StrengthSession({ sessionId, onBack }: { sessionId: stri
       const paths=Array.from(new Set(library.map(e=>e.image_path).filter((p):p is string=>!!p)));
       if(!paths.length){setPhotos({});return;}
       const {data}=await db.storage.from("exercise-images").createSignedUrls(paths,3600);
-      if(alive) setPhotos(Object.fromEntries((data??[]).filter(x=>x.path&&x.signedUrl).map(x=>[x.path!,x.signedUrl])));
+      if (alive) {
+        const nextPhotos: Record<string, string> = {};
+        for (const item of data ?? []) {
+          if (item.path && typeof item.signedUrl === "string" && item.signedUrl) {
+            nextPhotos[item.path] = item.signedUrl;
+          }
+        }
+        setPhotos(nextPhotos);
+      }
     }
     void loadPhotos(); return ()=>{alive=false;};
   },[db,library]);
