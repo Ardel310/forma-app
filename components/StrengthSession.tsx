@@ -95,8 +95,15 @@ export default function StrengthSession({ sessionId, onBack }: { sessionId: stri
       if(next.weight_kg!==null && (!Number.isFinite(next.weight_kg)||next.weight_kg<0)) throw new Error("Peso no válido.");
       if(next.reps!==null && (!Number.isInteger(next.reps)||next.reps<=0)) throw new Error("Introduce repeticiones enteras positivas.");
       if(next.is_completed && next.reps===null) throw new Error("Introduce las repeticiones antes de completar la serie.");
-      const {data,error}=await db.from("training_sets").update(patch).eq("id",row.id).select(setFields).single();
-      if(error) throw error; setSets(old=>old.map(s=>s.id===row.id?data as SetRow:s));
+      setSets(old=>old.map(s=>s.id===row.id?next:s));
+      try {
+        const {data,error}=await db.from("training_sets").update(patch).eq("id",row.id).select(setFields).single();
+        if(error) throw error;
+        setSets(old=>old.map(s=>s.id===row.id?data as SetRow:s));
+      } catch(err) {
+        setSets(old=>old.map(s=>s.id===row.id?row:s));
+        throw err;
+      }
     });
   }
   function splitSet(row:SetRow){
@@ -122,7 +129,8 @@ export default function StrengthSession({ sessionId, onBack }: { sessionId: stri
   const field: CSSProperties={width:"100%",minWidth:0,boxSizing:"border-box",fontFamily:"inherit",fontSize:16,padding:"8px 4px",border:`1px solid ${C.border}`,borderRadius:8,textAlign:"center",color:C.text};
   const readOnly=busy||session?.status==="completed";
   const filtered = library.filter(e => e.is_active && `${e.name} ${e.equipment ?? ""}`.toLocaleLowerCase("es").includes(search.trim().toLocaleLowerCase("es")));
-  return <div style={{display:"flex",flexDirection:"column",gap:16,width:"100%",color:C.text}}>
+  return <div className="strength-session-stable" style={{display:"flex",flexDirection:"column",gap:16,width:"100%",color:C.text}}>
+    <style>{`.strength-session-stable button:disabled, .strength-session-stable input:disabled, .strength-session-stable select:disabled { opacity: 1 !important; filter: none !important; } .strength-session-stable input:not([type=checkbox]), .strength-session-stable select { background-color: #fff; color: #25382F; -webkit-text-fill-color: #25382F; } .strength-session-stable button, .strength-session-stable input, .strength-session-stable select { -webkit-tap-highlight-color: transparent; transition: none !important; }`}</style>
     <button type="button" disabled={busy} onClick={onBack} style={{...btn,background:"none",padding:0,display:"flex",alignItems:"center",gap:8,alignSelf:"flex-start"}}><ArrowLeft size={18}/> Fuerza</button>
     {preview && <div role="dialog" aria-modal="true" aria-label="Fotografía del ejercicio" onClick={()=>setPreview(null)} style={{position:"fixed",inset:0,zIndex:1000,background:"rgba(0,0,0,.8)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}}><button type="button" aria-label="Cerrar fotografía" onClick={()=>setPreview(null)} style={{...btn,position:"absolute",top:24,right:20}}><X size={20}/></button><img src={preview} alt="Fotografía del ejercicio" style={{maxWidth:"100%",maxHeight:"85vh",objectFit:"contain",borderRadius:12}}/></div>}
     {error && <div role="alert" style={{...card,color:"#9B3C3C",fontSize:13}}>{error}</div>}
@@ -153,6 +161,6 @@ export default function StrengthSession({ sessionId, onBack }: { sessionId: stri
 
 function NumericField({label,value,disabled,style,onSave}:{label:string;value:number|null;disabled:boolean;style:CSSProperties;onSave:(v:number|null)=>void}) {
   const [draft,setDraft]=useState(value===null?"":String(value));
-  useEffect(()=>{setDraft(value===null?"":String(value));},[value,disabled]);
+  useEffect(()=>{setDraft(value===null?"":String(value));},[value]);
   return <input aria-label={label} inputMode={label==="Repeticiones"?"numeric":"decimal"} placeholder="—" value={draft} disabled={disabled} style={style} onChange={e=>setDraft(e.target.value)} onBlur={()=>{const raw=draft.trim().replace(",","."); const next=raw===""?null:Number(raw); if(next!==value) onSave(next);}} onKeyDown={e=>{if(e.key==="Enter") e.currentTarget.blur();}}/>;
 }
