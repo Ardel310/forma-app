@@ -6,6 +6,7 @@ import type { CSSProperties } from "react";
 import {
   ArrowLeft,
   Plus,
+  Pencil,
   Search,
   Star,
   Dumbbell,
@@ -18,6 +19,7 @@ import {
 } from "lucide-react";
 import { createClient } from "../lib/supabase/client";
 import MuscleGroups from "./MuscleGroups";
+import ExerciseForm from "./ExerciseForm";
 
 type MuscleGroup = {
   id: string;
@@ -134,7 +136,7 @@ export default function ExerciseLibrary({
   const [layout, setLayout] = useState<"grid" | "list">("grid");
 
   const [view, setView] = useState<
-    "library" | "groups" | "new" | "detail"
+    "library" | "groups" | "new" | "detail" | "edit"
   >("library");
 
   const [selected, setSelected] = useState<Exercise | null>(null);
@@ -335,7 +337,7 @@ export default function ExerciseLibrary({
   }
 
   function openView(
-    next: "library" | "groups" | "new" | "detail"
+    next: "library" | "groups" | "new" | "detail" | "edit"
   ) {
     setView(next);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -443,53 +445,47 @@ export default function ExerciseLibrary({
     );
   }
 
-  if (view === "new" || view === "detail") {
+  if (view === "new" || (view === "edit" && selected)) {
+    return (
+      <ExerciseForm
+        key={view === "edit" ? selected?.id : "new"}
+        exercise={view === "edit" ? selected : null}
+        onBack={() => openView(view === "edit" ? "detail" : "library")}
+        onSaved={() => {
+          setSelected(null);
+          resetFilters();
+          openView("library");
+          void loadLibrary();
+        }}
+      />
+    );
+  }
+
+  if (view === "detail" && selected) {
     return (
       <div style={{ display: "grid", gap: 16 }}>
-        <button
-          type="button"
-          onClick={() => openView("library")}
-          style={{
-            ...secondary,
-            justifySelf: "start",
-          }}
-        >
-          <ArrowLeft size={17} />
-          Biblioteca de ejercicios
+        <button type="button" onClick={() => openView("library")}
+          style={{ ...secondary, justifySelf: "start" }}>
+          <ArrowLeft size={17} /> Biblioteca de ejercicios
         </button>
-
-        <h2 style={{ margin: 0, fontSize: 23 }}>
-          {view === "new" ? "Nuevo ejercicio" : selected?.name}
-        </h2>
-
-        {view === "detail" && selected && (
-          <div style={card}>
-            {exerciseImage(selected)}
-
-            <div style={{ padding: 18 }}>
-              <p style={{ fontSize: 13, color: C.dark }}>
-                {primaryMap.get(selected.id)?.name ??
-                  "Sin grupo principal"}
-              </p>
-
-              <p style={{ fontSize: 12, color: C.muted }}>
-                {[
-                  selected.equipment,
-                  selected.gym,
-                  selected.is_unilateral ? "Unilateral" : null,
-                ]
-                  .filter(Boolean)
-                  .join(" · ")}
-              </p>
-            </div>
+        <h2 style={{ margin: 0, fontSize: 23 }}>{selected.name}</h2>
+        <div style={card}>
+          {exerciseImage(selected)}
+          <div style={{ padding: 18 }}>
+            <p style={{ fontSize: 13, color: C.dark }}>
+              {primaryMap.get(selected.id)?.name ?? "Sin grupo principal"}
+            </p>
+            <p style={{ fontSize: 12, color: C.muted }}>
+              {[selected.equipment, selected.gym, selected.is_unilateral ? "Unilateral" : null].filter(Boolean).join(" · ")}
+            </p>
           </div>
-        )}
-
+        </div>
+        <button type="button" style={button} onClick={() => openView("edit")}>
+          <Pencil size={17} /> Editar ejercicio
+        </button>
         <div style={{ ...card, padding: 24 }}>
           <p style={{ fontSize: 13, color: C.muted, margin: 0 }}>
-            {view === "new"
-              ? "El formulario de creación se incorporará en el siguiente paso."
-              : "La ficha completa, las variantes y el histórico se incorporarán próximamente."}
+            La ficha completa, las variantes y el histórico se incorporarán próximamente.
           </p>
         </div>
       </div>
