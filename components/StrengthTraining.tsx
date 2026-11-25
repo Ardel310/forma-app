@@ -6,6 +6,7 @@ import { ArrowLeft, ArrowRight, ChevronRight, Copy, Dumbbell, History, PlayCircl
 import { createClient } from "../lib/supabase/client";
 
 import StrengthSessionForm from "./StrengthSessionForm";
+import StrengthSession from "./StrengthSession";
 
 type Session = { id: string; name: string; session_date: string; status: string; duration_minutes: number | null };
 type View = "home" | "new" | "repeat" | "continue" | "history";
@@ -23,7 +24,7 @@ export default function StrengthTraining({ onBack }: { onBack: () => void }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [retry, setRetry] = useState(0);
-  const [createdId, setCreatedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   useEffect(() => {
     let cancelled = false;
     async function load() {
@@ -34,7 +35,7 @@ export default function StrengthTraining({ onBack }: { onBack: () => void }) {
         const fields = "id,name,session_date,status,duration_minutes";
         const [completed, unfinished] = await Promise.all([
           supabase.from("training_sessions").select(fields).eq("user_id", auth.user.id).eq("status", "completed").order("session_date", { ascending: false }).order("created_at", { ascending: false }).limit(5),
-          supabase.from("training_sessions").select(fields).eq("user_id", auth.user.id).in("status", ["draft", "in_progress"]).order("created_at", { ascending: false }).limit(5),
+          supabase.from("training_sessions").select(fields).eq("user_id", auth.user.id).in("status", ["draft", "in_progress"]).order("created_at", { ascending: false }),
         ]);
         if (completed.error || unfinished.error) throw new Error(completed.error?.message || unfinished.error?.message);
         if (!cancelled) { setSessions(completed.data || []); setPending(unfinished.data || []); }
@@ -44,13 +45,15 @@ export default function StrengthTraining({ onBack }: { onBack: () => void }) {
     void load();
     return () => { cancelled = true; };
   }, [supabase, retry]);
-  function open(next: View) { if (next === "home") setCreatedId(null); setView(next); window.scrollTo({ top: 0 }); }
+  function open(next: View) { setView(next); window.scrollTo({ top: 0 }); }
   const actions = [
     { key: "repeat" as const, Icon: Copy, description: "Duplica una sesión anterior." },
     { key: "continue" as const, Icon: PlayCircle, description: pending.length ? "Tienes sesiones pendientes." : "Recupera una sesión pendiente." },
     { key: "history" as const, Icon: History, description: "Consulta tus entrenamientos." },
   ];
-  if (view === "new") return <StrengthSessionForm onBack={() => open("home")} onCreated={(id) => { setCreatedId(id); setRetry(n => n + 1); open("continue"); }} />;
+  function openSession(id: string) { setSelectedId(id); window.scrollTo({ top: 0 }); }
+  if (selectedId) return <StrengthSession key={selectedId} sessionId={selectedId} onBack={() => { setSelectedId(null); setRetry(n => n + 1); open("home"); }} />;
+  if (view === "new") return <StrengthSessionForm onBack={() => open("home")} onCreated={(id) => { setRetry(n => n + 1); open("home"); openSession(id); }} />;
   return <section style={{ display: "grid", gap: 14, color: C.text }}>
     <button
       type="button"
@@ -63,9 +66,7 @@ export default function StrengthTraining({ onBack }: { onBack: () => void }) {
     <h2 style={{ margin: "4px 0 0", fontSize: 23, fontWeight: 600, color: C.text }}>{view === "home" ? "Fuerza" : labels[view]}</h2>
     {view !== "home" ? <div style={card}>
       {view === "continue" ? <>
-        {createdId && <p role="status" style={{ color: C.dark, fontSize: 13 }}>Entrenamiento creado y guardado correctamente.</p>}
-        {loading ? <p>Cargando sesiones…</p> : error ? <><p role="alert">{error}</p><button type="button" onClick={() => setRetry(n => n + 1)}>Reintentar</button></> : pending.length === 0 ? <p style={{ fontSize: 13, color: C.muted }}>No hay sesiones pendientes.</p> : pending.map(s => <div key={s.id} style={{ ...card, marginBottom: 8 }}><strong style={{ fontSize: 14 }}>{s.name}</strong><div style={{ fontSize: 12, color: C.muted }}>{dateLabel(s.session_date)} · {s.status === "draft" ? "Borrador" : "En curso"}</div></div>)}
-        <p style={{ fontSize: 13, color: C.muted }}>La edición de ejercicios se incorporará en el siguiente paso.</p>
+        {loading ? <p>Cargando sesiones…</p> : error ? <><p role="alert">{error}</p><button type="button" onClick={() => setRetry(n => n + 1)}>Reintentar</button></> : pending.length === 0 ? <p style={{ fontSize: 13, color: C.muted }}>No hay sesiones pendientes.</p> : pending.map(s => <button type="button" key={s.id} onClick={() => openSession(s.id)} style={{ ...button, ...card, marginBottom: 8, display: "flex", alignItems: "center", gap: 12 }}><span style={{ flex: 1 }}><strong style={{ fontSize: 14 }}>{s.name}</strong><span style={{ display: "block", fontSize: 12, color: C.muted }}>{dateLabel(s.session_date)} · {s.status === "draft" ? "Borrador" : "En curso"}</span></span><ChevronRight size={18} color={C.green}/></button>)}
       </> : <p style={{ margin: 0, fontSize: 14, color: C.muted }}>Esta funcionalidad se incorporará en los siguientes pasos del desarrollo.</p>}
     </div> : <>
       <p style={{ margin: 0, color: C.muted, fontSize: 13 }}>Registra tus entrenamientos y sigue tu evolución.</p>
