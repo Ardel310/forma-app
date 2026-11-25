@@ -465,8 +465,21 @@ export default function ExerciseLibrary({
     return (
       <div style={{ display: "grid", gap: 16 }}>
         <button type="button" onClick={() => openView("library")}
-          style={{ ...secondary, justifySelf: "start" }}>
-          <ArrowLeft size={17} /> Biblioteca de ejercicios
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifySelf: "start",
+            gap: 8,
+            background: "transparent",
+            border: 0,
+            color: C.dark,
+            fontFamily: "inherit",
+            fontSize: 13,
+            fontWeight: 600,
+            padding: 0,
+            cursor: "pointer",
+          }}>
+          <ArrowLeft size={18} /> Biblioteca de ejercicios
         </button>
         <h2 style={{ margin: 0, fontSize: 23 }}>{selected.name}</h2>
         <div style={card}>
