@@ -1,0 +1,26 @@
+"use client";
+import {useEffect,useMemo,useState} from 'react';
+import type {CSSProperties} from 'react';
+import {ArrowLeft} from 'lucide-react';
+import {createClient} from '../lib/supabase/client';
+import StrengthSessionSummary from './StrengthSessionSummary';
+import StrengthSession from './StrengthSession';
+import CardioSessionForm from './CardioSessionForm';
+import type {CardioItem,CardioSession} from './CardioSessionForm';
+import {ActivityDetail} from './CardioTraining';
+const back:CSSProperties={border:0,background:'none',font:'inherit',fontSize:13,color:'#596B60',display:'flex',alignItems:'center',gap:8,padding:0,cursor:'pointer',justifySelf:'start'};
+const field:CSSProperties={width:'100%',boxSizing:'border-box',minWidth:0,border:'1px solid #E5EAE5',borderRadius:12,padding:12,font:'inherit',fontSize:16,background:'white'};
+const action:CSSProperties={...field,background:'#7D8C82',color:'white',cursor:'pointer'};
+const today=()=>new Intl.DateTimeFormat('sv-SE',{timeZone:'Europe/Madrid'}).format(new Date());
+export default function HistorySessionDetail({id,strength,name,onBack}:{id:string;strength:boolean;name:string;onBack:()=>void}){
+ const db=useMemo(()=>createClient(),[]);
+ const [mode,setMode]=useState<'detail'|'edit'|'repeat'|'live'>('detail');
+ const [session,setSession]=useState<CardioSession|null>(null),[items,setItems]=useState<CardioItem[]>([]),[loading,setLoading]=useState(!strength),[error,setError]=useState(''),[busy,setBusy]=useState(false),[retry,setRetry]=useState(0);
+ const [title,setTitle]=useState(name),[date,setDate]=useState(today),[newId,setNewId]=useState('');
+ useEffect(()=>{if(strength)return;let alive=true;async function load(){setLoading(true);setError('');try{const {data:{user},error}=await db.auth.getUser();if(error||!user)throw new Error('Sesión no disponible');const s=await db.from('cardio_sessions').select('id,activity_id,session_date,duration_minutes,active_calories,average_heart_rate,max_heart_rate,distance_km,intensity,notes').eq('id',id).eq('user_id',user.id).single();if(s.error)throw s.error;const all:CardioItem[]=[];for(let o=0;;o+=500){const a=await db.from('cardio_activities').select('id,name,color,icon,category,is_active,is_favorite,supports_distance').eq('user_id',user.id).order('id').range(o,o+499);if(a.error)throw a.error;all.push(...(a.data??[]));if(!alive)return;if((a.data??[]).length<500)break;}if(alive){setSession(s.data);setItems(all);}}catch(e){if(alive)setError((e as {message?:string}).message||'No se pudo cargar la actividad.');}finally{if(alive)setLoading(false);}}void load();return()=>{alive=false};},[db,id,strength,retry]);
+ async function remove(){if(busy||!confirm('¿Eliminar esta actividad? No se puede deshacer.'))return;setBusy(true);setError('');try{const {data:{user}}=await db.auth.getUser();if(!user)throw new Error('Sesión no disponible');const r=await db.from('cardio_sessions').delete().eq('id',id).eq('user_id',user.id).select('id').single();if(r.error)throw r.error;onBack();}catch(e){setError((e as {message?:string}).message||'No se pudo eliminar.');}finally{setBusy(false);}}
+ async function repeat(){if(busy)return;if(!title.trim()||!date||date>today()){setError('Introduce un nombre y una fecha válida.');return;}setBusy(true);setError('');try{const r=await db.rpc('duplicate_training_session',{p_source_session_id:id,p_name:title.trim(),p_session_date:date});if(r.error)throw r.error;if(typeof r.data!=='string')throw new Error('No se recibió la nueva sesión.');setNewId(r.data);setMode('live');}catch(e){setError((e as {message?:string}).message||'No se pudo repetir.');}finally{setBusy(false);}}
+ if(strength){if(mode==='live')return <StrengthSession sessionId={newId} onBack={onBack}/>;if(mode==='repeat')return <section style={{display:'grid',gap:14,color:'#25382F'}}><button style={back} disabled={busy} onClick={()=>setMode('detail')}><ArrowLeft size={18}/> Entrenamiento</button><h2 style={{margin:0,fontSize:23}}>Repetir entrenamiento</h2><label>Nombre<input style={field} value={title} onChange={e=>setTitle(e.target.value)}/></label><label>Fecha<input style={field} type="date" max={today()} value={date} onChange={e=>setDate(e.target.value)}/></label>{error&&<small role="alert">{error}</small>}<button style={action} disabled={busy} onClick={()=>void repeat()}>{busy?'Duplicando…':'Comenzar entrenamiento'}</button><button style={back} disabled={busy} onClick={()=>setMode('detail')}>Cancelar</button></section>;return <StrengthSessionSummary sessionId={id} onBack={onBack} onRepeat={()=>{setError('');setMode('repeat');window.scrollTo({top:0});}}/>;}
+ if(mode==='edit'&&session)return <CardioSessionForm items={items} session={session} onBack={()=>setMode('detail')} onSaved={()=>{setMode('detail');setRetry(n=>n+1);}}/>;
+ return <section style={{display:'grid',gap:14,color:'#25382F'}}><button style={back} disabled={busy} onClick={onBack}><ArrowLeft size={18}/> Histórico</button>{loading?<small>Cargando actividad…</small>:session?<ActivityDetail session={session} item={items.find(a=>a.id===session.activity_id)} deleting={busy} error={error} onEdit={()=>setMode('edit')} onDelete={()=>void remove()}/>:<div role="alert">{error}<button style={back} onClick={()=>setRetry(n=>n+1)}>Reintentar</button></div>}</section>;
+}
