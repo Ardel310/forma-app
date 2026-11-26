@@ -23,7 +23,7 @@ import {
   Check,
   ShoppingCart,
   Scale,
-  Apple, Sunrise, Utensils, Cherry, Cookie, Moon, Milk,
+  Apple, Coffee, Utensils, IceCreamCone, Sandwich, Moon, Milk, Sun, Banana, Clock, GlassWater, Soup, Egg, ListOrdered,
   type LucideIcon,
 } from "lucide-react";
 import { createClient } from "../lib/supabase/client";
@@ -33,6 +33,7 @@ import FoodCatalog from "../components/FoodCatalog";
 import BodyProgress from "../components/BodyProgress";
 import FormaLoader from "../components/FormaLoader";
 import HomeDashboard from "../components/HomeDashboard";
+import MealCategories from "../components/MealCategories";
 import Training from "../components/Training";
 
 type Section =
@@ -101,15 +102,8 @@ const C = {
   danger: "#B45353",
 };
 
-const mealTypes = [
-  { id: "breakfast", label: "Desayuno" },
-  { id: "morning_snack", label: "Media mañana" },
-  { id: "lunch", label: "Almuerzo" },
-  { id: "lunch_dessert", label: "Postre del almuerzo" },
-  { id: "afternoon_snack", label: "Merienda" },
-  { id: "dinner", label: "Cena" },
-  { id: "dinner_dessert", label: "Postre de la cena" },
-];
+type MealCategory = {code:string;name:string;icon:string;sort_order:number;is_active:boolean};
+const mealIcons: Record<string,LucideIcon> = {coffee:Coffee,apple:Apple,utensils:Utensils,"ice-cream-cone":IceCreamCone,sandwich:Sandwich,moon:Moon,milk:Milk,dumbbell:Dumbbell,sun:Sun,banana:Banana,clock:Clock,"glass-water":GlassWater,soup:Soup,egg:Egg,salad:Salad};
 
 const navigation: NavItem[] = [
   {
@@ -191,13 +185,6 @@ function weekday(value: string) {
   })
     .format(parseDate(value))
     .replace(".", "");
-}
-
-function mealLabel(type: string) {
-  return (
-    mealTypes.find((item) => item.id === type)?.label ??
-    type
-  );
 }
 
 function normalizeIngredients(value: unknown): Ingredient[] {
@@ -283,11 +270,15 @@ export default function HomePage() {
 
   const [section, setSection] = useState<Section>("home");
   const [navigationKey, setNavigationKey] = useState(0);
-  const [libraryView, setLibraryView] = useState<"plans" | "catalog">("plans");
-  function openLibraryView(view: "plans" | "catalog") {
+  const [libraryView, setLibraryView] = useState<"plans" | "catalog" | "categories">("plans");
+  function openLibraryView(view: "plans" | "catalog" | "categories") {
     setLibraryView(view);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
+  const [categories,setCategories]=useState<MealCategory[]>([]);
+  const [loadingCategories,setLoadingCategories]=useState(true);
+  const [categoryError,setCategoryError]=useState("");
+  function mealLabel(code:string){return categories.find(c=>c.code===code)?.name??code;}
   const [checkingSession, setCheckingSession] =
     useState(true);
   const [loggingOut, setLoggingOut] = useState(false);
@@ -400,6 +391,8 @@ export default function HomePage() {
     };
   }, [router, supabase]);
 
+  useEffect(()=>{if(checkingSession || libraryView==="categories")return;let live=true;setLoadingCategories(true);setCategoryError("");async function load(){try{const r=await supabase.from("meal_categories").select("code,name,icon,sort_order,is_active").order("sort_order").order("id");if(r.error)throw r.error;if(live)setCategories(r.data??[]);}catch(e){if(live)setCategoryError((e as Error).message);}finally{if(live)setLoadingCategories(false);}}void load();return()=>{live=false;};},[supabase,checkingSession,libraryView,refreshKey]);
+
   // CARGAR COMIDAS DE LA SEMANA
   const loadMeals = useCallback(async () => {
     if (!today || !weekStart || checkingSession) {
@@ -477,7 +470,7 @@ export default function HomePage() {
 
   // CONSULTAR OPCIONES DE LA MISMA COMIDA
   async function showOptions(target = selectedMeal) {
-    if (!target) return;
+    if (!target || !categories.some(c=>c.code===target.meal_type&&c.is_active)) return;
     setChangingOption(true);
     setLoadingOptions(true);
     setOptionError("");
@@ -589,6 +582,10 @@ export default function HomePage() {
     items: PlannedMeal[],
     interactive = true
   ) {
+    if(loadingCategories)return <FormaLoader size={40} minHeight={100}/>;
+    if(categoryError)return <p role="alert">{categoryError}</p>;
+    const types=categories.filter(c=>c.is_active||items.some(m=>m.meal_type===c.code));
+    for(const m of items)if(!types.some(c=>c.code===m.meal_type))types.push({code:m.meal_type,name:m.meal_type,icon:"utensils",sort_order:9999,is_active:false});
     return (
       <div
         style={{
@@ -597,8 +594,9 @@ export default function HomePage() {
           gap: section === "home" ? 2 : 16,
         }}
       >
-        {mealTypes.map((type, index) => {
-          const MealIcon = [Sunrise, Apple, Utensils, Cherry, Cookie, Moon, Milk][index];
+        {types.map((category, index) => {
+          const type={id:category.code,label:category.name};
+          const MealIcon = mealIcons[category.icon]??Utensils;
           const meal = items.find(
             (item) => item.meal_type === type.id
           );
@@ -607,7 +605,7 @@ export default function HomePage() {
             <button
               key={type.id}
               type="button"
-              disabled={!interactive || (section === "home" && selectedDay < today && !meal)}
+              disabled={!interactive || (selectedDay < today && !meal)}
               aria-label={`${type.label}: ${meal?.meal_name_snapshot ?? "Sin planificar"}`} 
               onClick={() => {
                 if (meal) openMeal(meal);
@@ -941,7 +939,7 @@ export default function HomePage() {
                   <p style={{fontSize:11,color:C.muted,lineHeight:1.6,marginBottom:0}}>Los pesos prescritos siguen siendo en crudo. {selectedMeal.meal_date<today && !Array.isArray(selectedMeal.cooking_conversions_snapshot)?"Estimaciones con factores disponibles; todavía no hay copia histórica.":"Los valores automáticos son orientativos."}</p>
                 </section>
                 </>)}
-                {selectedMeal.meal_date < today ? <p style={{fontSize:12,color:C.muted}}>Comida histórica · Solo consulta</p> : !changingOption ? (
+                {(selectedMeal.meal_date < today || !categories.some(c=>c.code===selectedMeal.meal_type&&c.is_active)) ? <p style={{fontSize:12,color:C.muted}}>Solo consulta · Fecha pasada o categoría archivada</p> : !changingOption ? (
                   <AppButton onClick={() => void showOptions()}>
                     {selectedMeal.id ? "Cambiar esta comida" : "Seleccionar comida"}
                   </AppButton>
@@ -1312,9 +1310,10 @@ export default function HomePage() {
 
         {/* BIBLIOTECA */}
         {section === "library" && (
-          libraryView === "catalog" ? <FoodCatalog onBack={() => openLibraryView("plans")} /> : (
+          libraryView === "categories" ? <MealCategories onBack={()=>openLibraryView("plans")} /> : libraryView === "catalog" ? <FoodCatalog onBack={() => openLibraryView("plans")} /> : (
             <>
-              <div style={{display:"flex",justifyContent:"flex-end",marginBottom:8}}>
+              <div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap",marginBottom:8}}>
+                <button type="button" onClick={()=>openLibraryView("categories")} style={{display:"flex",alignItems:"center",gap:7,border:`1px solid ${C.border}`,background:C.white,color:C.darkGreen,borderRadius:11,padding:"9px 12px",fontFamily:"inherit",fontSize:12,fontWeight:500,cursor:"pointer"}}><ListOrdered size={17}/> Categorías de comida</button>
                 <button type="button" onClick={() => openLibraryView("catalog")} style={{display:"flex",alignItems:"center",gap:7,border:`1px solid ${C.border}`,background:C.white,color:C.darkGreen,borderRadius:11,padding:"9px 12px",fontFamily:"inherit",fontSize:12,fontWeight:500,cursor:"pointer"}}>
                   <Apple size={17} strokeWidth={1.7}/> Catálogo
                 </button>
