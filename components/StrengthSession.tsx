@@ -1,4 +1,5 @@
 "use client";
+import FormaLoader from "./FormaLoader";
 import { useEffect, useMemo, useState, useRef } from "react";
 import type { CSSProperties } from "react";
 import { ArrowLeft, Plus, Dumbbell, X, EllipsisVertical, ArrowUp, ArrowDown, Repeat, NotebookPen, BookOpen, Trash2 } from "lucide-react";
@@ -243,7 +244,7 @@ export default function StrengthSession({ sessionId, onBack }: { sessionId: stri
     <button type="button" aria-disabled={busy} onClick={()=>{if(!lock.current)onBack();}} style={{...btn,background:"none",padding:0,display:"flex",alignItems:"center",gap:8,alignSelf:"flex-start"}}><ArrowLeft size={18}/> Fuerza</button>
     {preview && <div role="dialog" aria-modal="true" aria-label="Fotografía del ejercicio" onClick={()=>setPreview(null)} style={{position:"fixed",inset:0,zIndex:1000,background:"rgba(0,0,0,.8)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}}><button type="button" aria-label="Cerrar fotografía" onClick={()=>setPreview(null)} style={{...btn,position:"absolute",top:24,right:20}}><X size={20}/></button><img src={preview} alt="Fotografía del ejercicio" style={{maxWidth:"100%",maxHeight:"85vh",objectFit:"contain",borderRadius:12}}/></div>}
     {error && <div role="alert" style={{...card,color:"#9B3C3C",fontSize:13}}>{error}</div>}
-    {loading ? <p style={{color:C.muted}}>Cargando entrenamiento…</p> : !session ? <button style={btn} onClick={()=>setRetry(n=>n+1)}>Reintentar</button> : <>
+    {loading ? <FormaLoader size={48} minHeight={140}/> : !session ? <button style={btn} onClick={()=>setRetry(n=>n+1)}>Reintentar</button> : <>
       <header><h2 style={{margin:0,fontSize:24,fontWeight:600}}>{session.name}</h2><p style={{fontSize:13,color:C.muted,margin:"5px 0 0"}}>{new Date(`${session.session_date}T12:00:00`).toLocaleDateString("es-ES",{day:"numeric",month:"short",year:"numeric"})} · {session.status === "completed" ? "Finalizado" : session.status === "in_progress" ? "En curso" : "Borrador"}</p></header>
       {entries.length === 0 && <div style={{...card,textAlign:"center",color:C.muted,fontSize:13}}><Dumbbell size={28} color={C.green}/><p>Todavía no hay ejercicios en esta sesión.</p></div>}
       {entries.map((entry,i)=>{const exercise=library.find(e=>e.id===entry.exercise_id); const rows=sets.filter(s=>s.training_exercise_id===entry.id).sort((a,b)=>a.set_number-b.set_number || a.side.localeCompare(b.side)); const unilateral=!!exercise?.is_unilateral||rows.some(r=>r.side!=="both"); const prev=previous[entry.exercise_id]; const baseColumns=`${unilateral?42:28}px repeat(2,minmax(0,1fr)) 25px 20px`; const columns=prev?baseColumns.replace(/^\d+px /,`${unilateral?42:28}px minmax(54px,0.9fr) `):baseColumns; const group=groups[entry.exercise_id]; const photo=exercise?.image_path?photos[exercise.image_path]:undefined; return <section key={entry.id} style={{...card,display:"flex",flexDirection:"column",gap:12}}>
