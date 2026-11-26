@@ -1,5 +1,6 @@
 
 "use client";
+import FormaLoader from "./FormaLoader";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
@@ -768,9 +769,7 @@ export default function ExerciseLibrary({
       </div>
 
       {loading ? (
-        <p style={{ fontSize: 12, color: C.muted }}>
-          Cargando ejercicios...
-        </p>
+        <FormaLoader />
       ) : filtered.length === 0 ? (
         <div
           style={{
