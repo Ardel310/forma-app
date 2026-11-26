@@ -10,11 +10,11 @@ const field: CSSProperties = { width: "100%", minWidth: 0, boxSizing: "border-bo
 const label: CSSProperties = { display: "flex", flexDirection: "column", gap: 6, fontSize: 13, fontWeight: 600, color: C.text };
 function today() { return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Madrid", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date()); }
 
-export default function StrengthSessionForm({ onBack, onCreated }: { onBack: () => void; onCreated: (id: string) => void }) {
+export default function StrengthSessionForm({ onBack, onCreated, initialDate }: { onBack: () => void; onCreated: (id: string) => void; initialDate?: string }) {
   const supabase = useMemo(() => createClient(), []);
   const [name, setName] = useState("");
-  const [date, setDate] = useState(today);
-  const [mode, setMode] = useState<"live" | "past">("live");
+  const [date, setDate] = useState(() => initialDate || today());
+  const [mode, setMode] = useState<"live" | "past">(initialDate && initialDate !== today() ? "past" : "live");
   const [notes, setNotes] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
