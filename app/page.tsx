@@ -31,6 +31,7 @@ import ShoppingList from "../components/ShoppingList";
 import NutritionPlans from "../components/NutritionPlans";
 import FoodCatalog from "../components/FoodCatalog";
 import BodyProgress from "../components/BodyProgress";
+import FormaLoader from "../components/FormaLoader";
 import HomeDashboard from "../components/HomeDashboard";
 import Training from "../components/Training";
 
@@ -694,7 +695,7 @@ export default function HomePage() {
           color: C.green,
         }}
       >
-        Comprobando acceso a FORMA...
+        <FormaLoader size={72} minHeight={140} />
       </main>
     );
   }
@@ -792,7 +793,7 @@ export default function HomePage() {
           </button>
         </header>
 
-        {section === "home" && <HomeDashboard today={today} day={selectedDay} onDay={setSelectedDay} menu={loadingMeals ? <small>Cargando menú…</small> : mealError ? <small role="alert">{mealError}</small> : renderMealRows(selectedDayMeals)} onMenu={()=>{const d=selectedDay; navigate("nutrition");setSelectedDay(d);}} onShopping={()=>{navigate("nutrition");setShowShopping(true);}} onProgress={()=>navigate("progress")}/>}
+        {section === "home" && <HomeDashboard today={today} day={selectedDay} onDay={setSelectedDay} menu={loadingMeals ? <FormaLoader size={40} minHeight={100} /> : mealError ? <small role="alert">{mealError}</small> : renderMealRows(selectedDayMeals)} onMenu={()=>{const d=selectedDay; navigate("nutrition");setSelectedDay(d);}} onShopping={()=>{navigate("nutrition");setShowShopping(true);}} onProgress={()=>navigate("progress")}/>}
 
         {/* NUTRICIÓN */}
         {section === "nutrition" && (
@@ -925,7 +926,7 @@ export default function HomePage() {
 
                 <section style={{background:C.white,border:`1px solid ${C.border}`,borderRadius:20,padding:19,marginBottom:15}}>
                   <h2 style={{display:"flex",alignItems:"center",gap:9,fontSize:15,margin:"0 0 12px"}}><Scale size={19} color={C.green}/> Conversión crudo/cocinado</h2>
-                  {loadingConversions ? <p>Cargando conversiones...</p> : conversionError ? <p role="alert" style={{color:C.danger}}>{conversionError}</p> : ingredients.flatMap(item=>{
+                  {loadingConversions ? <FormaLoader size={36} minHeight={80} /> : conversionError ? <p role="alert" style={{color:C.danger}}>{conversionError}</p> : ingredients.flatMap(item=>{
                     if(item.quantity===null || item.unit?.trim().toLowerCase()!=="g") return [];
                     const overrides=Array.isArray(selectedMeal.cooking_overrides)?selectedMeal.cooking_overrides.filter(o=>o.ingredient_index===item.index):[];
                     const matches=conversions.filter(c=>ingredientKey(c.ingredient_name)===ingredientKey(item.ingredient));
@@ -963,14 +964,7 @@ export default function HomePage() {
                     </h2>
 
                     {loadingOptions ? (
-                      <p
-                        style={{
-                          fontSize: 12,
-                          color: C.muted,
-                        }}
-                      >
-                        Cargando opciones...
-                      </p>
+                      <FormaLoader size={40} minHeight={100} />
                     ) : (
                       <div
                         style={{
@@ -1290,14 +1284,7 @@ export default function HomePage() {
                   </div>
 
                   {loadingMeals ? (
-                    <p
-                      style={{
-                        fontSize: 12,
-                        color: C.muted,
-                      }}
-                    >
-                      Cargando comidas...
-                    </p>
+                    <FormaLoader size={40} minHeight={100} />
                   ) : mealError ? (
                     <p
                       role="alert"
