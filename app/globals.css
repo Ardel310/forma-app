@@ -1,12 +1,15 @@
-
 :root {
   --primary: #7D8C82;
   --primary-dark: #596B60;
   --background: #F7F8F6;
   --surface: #FFFFFF;
-  --text: #24312A;
+  --text: #25382F;
   --muted: #78847B;
   --border: #E5EAE5;
+  --pale: #EEF2EE;
+  --radius: 12px;
+  --card-radius: 20px;
+  color-scheme: light;
 }
 
 * {
@@ -25,29 +28,50 @@ body {
   min-height: 100dvh;
   background: var(--background);
   color: var(--text);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-poppins, Poppins, Arial), sans-serif;
   -webkit-font-smoothing: antialiased;
   padding-top: env(safe-area-inset-top, 0px);
   padding-left: env(safe-area-inset-left, 0px);
   padding-right: env(safe-area-inset-right, 0px);
 }
 
-button,
-input,
-select,
-textarea {
-  font: inherit;
-}
-
+button, input, select, textarea { font: inherit; }
 button {
+  -webkit-appearance: none;
+  appearance: none;
+  border: 0;
   cursor: pointer;
   touch-action: manipulation;
 }
+button:disabled { cursor: not-allowed; opacity: .55; }
 
-input,
-select,
-textarea {
+input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]),
+select, textarea {
+  min-width: 0;
+  max-width: 100%;
   font-size: 16px;
+  color: var(--text);
+  background-color: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+}
+input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
+textarea { resize: vertical; }
+
+select:not([multiple]):not([size]) {
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23596B60' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 16px center !important;
+  background-size: 16px 16px !important;
+  padding-right: 44px !important;
+}
+
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, a:focus-visible {
+  outline: 2px solid var(--primary-dark);
+  outline-offset: 3px;
 }
 
 .app-container {
@@ -55,23 +79,19 @@ textarea {
   max-width: 1100px;
   margin: 0 auto;
   padding: 24px 16px;
-  padding-bottom: calc(
-    100px + env(safe-area-inset-bottom)
-  );
+  padding-bottom: calc(100px + env(safe-area-inset-bottom, 0px));
 }
-
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 18px;
+  border-radius: var(--card-radius);
   padding: 20px;
 }
-
 .primary-button {
   background: var(--primary);
   color: white;
   border: none;
-  border-radius: 12px;
+  border-radius: var(--radius);
   padding: 14px 20px;
   font-weight: 600;
 }
@@ -79,30 +99,16 @@ textarea {
 @media (max-width: 600px) {
   .app-container {
     padding: 20px 16px;
-    padding-bottom: calc(
-      100px + env(safe-area-inset-bottom)
-    );
+    padding-bottom: calc(100px + env(safe-area-inset-bottom, 0px));
   }
-
-  input,
-  select,
-  textarea {
-    font-size: 16px !important;
-  }
+  input, select, textarea { font-size: 16px !important; }
 }
-
 @media (display-mode: standalone) {
-  html,
-  body {
-    overscroll-behavior-y: none;
-  }
+  html, body { overscroll-behavior-y: none; }
 }
 
-/* Ajuste de campos de fecha en iOS */
-
-input[type="date"],
-input[type="datetime-local"],
-input[type="time"] {
+/* Campos de fecha y hora en iOS */
+input[type="date"], input[type="datetime-local"], input[type="time"] {
   display: block;
   width: 100%;
   max-width: 100%;
@@ -111,17 +117,14 @@ input[type="time"] {
   -webkit-appearance: none;
   appearance: none;
 }
-
 input[type="date"]::-webkit-date-and-time-value {
   text-align: left;
   min-height: 1.2em;
 }
+label { min-width: 0; }
+input[type="checkbox"], input[type="radio"] { accent-color: var(--primary); }
 
-label {
-  min-width: 0;
-}
-
-input[type="checkbox"],
-input[type="radio"] {
-  accent-color: #7D8C82;
+@media (prefers-reduced-motion: reduce) {
+  html:focus-within { scroll-behavior: auto; }
+  .forma-loader-fill { animation: none !important; transform: scaleY(1) !important; }
 }
