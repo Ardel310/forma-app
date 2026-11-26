@@ -1,5 +1,6 @@
 
 "use client";
+import FormaLoader from "./FormaLoader";
 
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -628,14 +629,7 @@ export default function ShoppingList({
       {/* ESTADOS */}
 
       {loading && (
-        <p style={{
-          textAlign: "center",
-          padding: 25,
-          color: C.muted,
-          fontSize: 13,
-        }}>
-          Calculando tu lista de la compra...
-        </p>
+        <FormaLoader size={44} minHeight={110}/>
       )}
 
       {error && (
