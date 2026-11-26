@@ -23,7 +23,7 @@ import {
   Check,
   ShoppingCart,
   Scale,
-  Apple,
+  Apple, Sunrise, Utensils, Cherry, Cookie, Moon, Milk,
   type LucideIcon,
 } from "lucide-react";
 import { createClient } from "../lib/supabase/client";
@@ -31,6 +31,7 @@ import ShoppingList from "../components/ShoppingList";
 import NutritionPlans from "../components/NutritionPlans";
 import FoodCatalog from "../components/FoodCatalog";
 import BodyProgress from "../components/BodyProgress";
+import HomeDashboard from "../components/HomeDashboard";
 import Training from "../components/Training";
 
 type Section =
@@ -438,7 +439,7 @@ export default function HomePage() {
     setSection(destination);
     setLibraryView("plans");
     setShowShopping(false);
-    if (destination === "home" && today) setWeekStart(mondayOf(today));
+    if (destination === "home" && today) {setWeekStart(mondayOf(today)); setSelectedDay(today); setRefreshKey(v=>v+1);}
     setSelectedMeal(null);
     setChangingOption(false);
     setOptionError("");
@@ -577,9 +578,7 @@ export default function HomePage() {
     [weekStart]
   );
 
-  const todayMeals = meals.filter(
-    (meal) => meal.meal_date === today
-  );
+
 
   const selectedDayMeals = meals.filter(
     (meal) => meal.meal_date === selectedDay
@@ -594,10 +593,11 @@ export default function HomePage() {
         style={{
           display: "flex",
           flexDirection: "column",
-          gap: 16,
+          gap: section === "home" ? 2 : 16,
         }}
       >
         {mealTypes.map((type, index) => {
+          const MealIcon = [Sunrise, Apple, Utensils, Cherry, Cookie, Moon, Milk][index];
           const meal = items.find(
             (item) => item.meal_type === type.id
           );
@@ -606,10 +606,11 @@ export default function HomePage() {
             <button
               key={type.id}
               type="button"
-              disabled={!interactive}
+              disabled={!interactive || (section === "home" && selectedDay < today && !meal)}
+              aria-label={`${type.label}: ${meal?.meal_name_snapshot ?? "Sin planificar"}`} 
               onClick={() => {
                 if (meal) openMeal(meal);
-                else openEmptyMeal(section === "home" ? today : selectedDay, type.id);
+                else openEmptyMeal(selectedDay, type.id);
               }}
               style={{
                 width: "100%",
@@ -639,11 +640,11 @@ export default function HomePage() {
                   fontWeight: 600,
                 }}
               >
-                {index + 1}
+                {section === "home" ? <MealIcon size={17} strokeWidth={1.6}/> : index + 1}
               </span>
 
               <span style={{ flex: 1, minWidth: 0 }}>
-                <span
+                {section !== "home" && <span
                   style={{
                     display: "block",
                     marginBottom: 3,
@@ -652,7 +653,7 @@ export default function HomePage() {
                   }}
                 >
                   {type.label}
-                </span>
+                </span>}
 
                 <span
                   style={{
@@ -791,205 +792,7 @@ export default function HomePage() {
           </button>
         </header>
 
-        {/* HOME */}
-        {section === "home" && (
-          <>
-            <section style={{ marginBottom: 23 }}>
-              <p
-                style={{
-                  color: C.green,
-                  fontSize: 11,
-                  fontWeight: 600,
-                  letterSpacing: "0.09em",
-                  textTransform: "uppercase",
-                  margin: "0 0 7px",
-                }}
-              >
-                {today && fullDate(today)}
-              </p>
-
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 7 }}>
-              <h1
-                style={{
-                  fontSize: 29,
-                  fontWeight: 600,
-                  letterSpacing: "-0.04em",
-                  margin: 0,
-                }}
-              >
-                Mi día de hoy
-              </h1>
-                <button
-                  type="button"
-                  aria-label="Lista de la compra"
-                  title="Lista de la compra"
-                  onClick={() => {
-                    navigate("nutrition");
-                    setShowShopping(true);
-                  }}
-                  disabled={!today || !weekStart}
-                  style={{
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    width: 44, height: 44, flexShrink: 0,
-                    border: `1px solid ${C.border}`, borderRadius: 14,
-                    background: C.white, color: C.green, cursor: "pointer",
-                  }}
-                >
-                  <ShoppingCart size={22} strokeWidth={1.8} />
-                </button>
-              </div>
-
-              <p
-                style={{
-                  fontSize: 12,
-                  color: C.muted,
-                  margin: 0,
-                }}
-              >
-                Tu alimentación y entrenamiento diario.
-              </p>
-            </section>
-
-            <section
-              style={{
-                background: C.white,
-                border: `1px solid ${C.border}`,
-                borderRadius: 21,
-                padding: "19px 17px",
-                marginBottom: 17,
-              }}
-            >
-              <button
-                type="button"
-                onClick={() => navigate("nutrition")}
-                style={{
-                  width: "100%",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  padding: 0,
-                  border: "none",
-                  background: "transparent",
-                  cursor: "pointer",
-                  fontFamily: "inherit",
-                  color: C.text,
-                }}
-              >
-                <span
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 10,
-                    fontSize: 16,
-                    fontWeight: 600,
-                  }}
-                >
-                  <Salad
-                    size={22}
-                    color={C.green}
-                    strokeWidth={1.7}
-                  />
-                  Mi menú de hoy
-                </span>
-
-                <ChevronRight size={19} color={C.green} />
-              </button>
-
-              <div
-                style={{
-                  height: 1,
-                  background: C.border,
-                  margin: "17px 0",
-                }}
-              />
-
-              {loadingMeals ? (
-                <p style={{ color: C.muted, fontSize: 12 }}>
-                  Cargando tu menú...
-                </p>
-              ) : mealError ? (
-                <p
-                  role="alert"
-                  style={{ color: C.danger, fontSize: 12 }}
-                >
-                  {mealError}
-                </p>
-              ) : (
-                renderMealRows(todayMeals)
-              )}
-
-              <div style={{ marginTop: 20 }}>
-                <AppButton
-                  secondary
-                  onClick={() => navigate("nutrition")}
-                >
-                  Ver mi planificación semanal
-                </AppButton>
-              </div>
-            </section>
-
-            <section
-              style={{
-                background: C.green,
-                color: C.white,
-                borderRadius: 21,
-                padding: 19,
-              }}
-            >
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 10,
-                  marginBottom: 8,
-                }}
-              >
-                <Dumbbell size={23} strokeWidth={1.7} />
-
-                <h2
-                  style={{
-                    margin: 0,
-                    fontSize: 16,
-                    fontWeight: 600,
-                  }}
-                >
-                  Mi entrenamiento
-                </h2>
-              </div>
-
-              <p
-                style={{
-                  margin: "0 0 17px",
-                  fontSize: 12,
-                  lineHeight: 1.6,
-                  opacity: 0.9,
-                }}
-              >
-                Registra tu sesión cuando entrenes.
-                Tú decides tus días de descanso.
-              </p>
-
-              <button
-                type="button"
-                onClick={() => navigate("training")}
-                style={{
-                  width: "100%",
-                  minHeight: 47,
-                  background: C.white,
-                  color: C.darkGreen,
-                  border: "none",
-                  borderRadius: 13,
-                  fontSize: 13,
-                  fontWeight: 600,
-                  fontFamily: "inherit",
-                  cursor: "pointer",
-                }}
-              >
-                + Registrar entrenamiento
-              </button>
-            </section>
-          </>
-        )}
+        {section === "home" && <HomeDashboard today={today} day={selectedDay} onDay={setSelectedDay} menu={loadingMeals ? <small>Cargando menú…</small> : mealError ? <small role="alert">{mealError}</small> : renderMealRows(selectedDayMeals)} onMenu={()=>{const d=selectedDay; navigate("nutrition");setSelectedDay(d);}} onShopping={()=>{navigate("nutrition");setShowShopping(true);}} onProgress={()=>navigate("progress")}/>}
 
         {/* NUTRICIÓN */}
         {section === "nutrition" && (
