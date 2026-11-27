@@ -1311,7 +1311,7 @@ export default function HomePage() {
         {/* BIBLIOTECA */}
         {section === "library" && (
           libraryView === "categories" ? <MealCategories onBack={()=>openLibraryView("plans")} /> : libraryView === "catalog" ? <FoodCatalog onBack={() => openLibraryView("plans")} /> : (
-            <NutritionPlans key={navigationKey} toolbar={(<div style={{display:"flex",justifyContent:"flex-end",gap:8,flexWrap:"wrap",marginBottom:8}}>
+            <NutritionPlans key={navigationKey} toolbar={(<div style={{display:"flex",justifyContent:"flex-start",gap:8,flexWrap:"wrap",marginBottom:8}}>
                 <button type="button" onClick={()=>openLibraryView("categories")} style={{display:"flex",alignItems:"center",gap:7,border:`1px solid ${C.border}`,background:C.white,color:C.darkGreen,borderRadius:11,padding:"9px 12px",fontFamily:"inherit",fontSize:12,fontWeight:500,cursor:"pointer"}}><ListOrdered size={17}/> Categorías de comida</button>
                 <button type="button" onClick={() => openLibraryView("catalog")} style={{display:"flex",alignItems:"center",gap:7,border:`1px solid ${C.border}`,background:C.white,color:C.darkGreen,borderRadius:11,padding:"9px 12px",fontFamily:"inherit",fontSize:12,fontWeight:500,cursor:"pointer"}}>
                   <Apple size={17} strokeWidth={1.7}/> Catálogo
