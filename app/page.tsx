@@ -791,7 +791,7 @@ export default function HomePage() {
           </button>
         </header>
 
-        {section === "home" && <HomeDashboard today={today} day={selectedDay} onDay={setSelectedDay} menu={loadingMeals ? <FormaLoader size={40} minHeight={100} /> : mealError ? <small role="alert">{mealError}</small> : renderMealRows(selectedDayMeals)} onMenu={()=>{const d=selectedDay; navigate("nutrition");setSelectedDay(d);}} onShopping={()=>{navigate("nutrition");setShowShopping(true);}} onProgress={()=>navigate("progress")}/>}
+        {section === "home" && <HomeDashboard key={navigationKey} today={today} day={selectedDay} onDay={setSelectedDay} menu={loadingMeals ? <FormaLoader size={40} minHeight={100} /> : mealError ? <small role="alert">{mealError}</small> : renderMealRows(selectedDayMeals)} onMenu={()=>{const d=selectedDay; navigate("nutrition");setSelectedDay(d);}} onShopping={()=>{navigate("nutrition");setShowShopping(true);}} onProgress={()=>navigate("progress")}/>}
 
         {/* NUTRICIÓN */}
         {section === "nutrition" && (
