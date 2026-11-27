@@ -1,6 +1,7 @@
 
 "use client";
 
+import FormaLoader from "./FormaLoader";
 import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties, FormEvent } from "react";
 import {
@@ -37,6 +38,7 @@ type MuscleGroup = {
 
 type Props = {
   exercise?: Exercise | null;
+  duplicate?: boolean;
   onBack: () => void;
   onSaved: (id: string) => void;
 };
@@ -306,6 +308,7 @@ function Toggle({
 
 export default function ExerciseForm({
   exercise = null,
+  duplicate = false,
   onBack,
   onSaved,
 }: Props) {
@@ -321,10 +324,14 @@ export default function ExerciseForm({
     useState<string[]>(defaultEquipment);
 
   const [name, setName] =
-    useState(exercise?.name ?? "");
+    useState(duplicate ? `${exercise?.name ?? ""} (variante)`.slice(0,120) : exercise?.name ?? "");
 
   const [equipment, setEquipment] =
     useState(exercise?.equipment ?? "");
+
+  const [customEquipment, setCustomEquipment] = useState(false);
+  const [linkVariant, setLinkVariant] = useState(true);
+  const [pendingLinkId, setPendingLinkId] = useState<string | null>(null);
 
   const [primaryGroup, setPrimaryGroup] =
     useState("");
@@ -563,6 +570,17 @@ export default function ExerciseForm({
 
     setError("");
 
+    if (pendingLinkId && exercise) {
+      setBusy(true);
+      try {
+        const { error } = await supabase.from("exercise_variants").insert({ exercise_id: exercise.id, variant_id: pendingLinkId });
+        if (error && error.code !== "23505") throw error;
+        onSaved(pendingLinkId);
+      } catch (error) { setError((error as {message?: string}).message ?? "No se pudo vincular la variante."); }
+      finally { setBusy(false); }
+      return;
+    }
+
     if (!name.trim()) {
       setError(
         "Introduce el nombre del ejercicio."
@@ -632,7 +650,7 @@ export default function ExerciseForm({
       const { data, error } = await supabase.rpc(
         "save_exercise",
         {
-          p_exercise_id: exercise?.id ?? null,
+          p_exercise_id: duplicate ? null : exercise?.id ?? null,
           p_name: name.trim(),
           p_equipment: equipment.trim() || null,
           p_gym: exercise?.gym ?? null,
@@ -657,33 +675,16 @@ export default function ExerciseForm({
       }
 
       savedId = data;
-
-      // La imagen anterior se conserva hasta
-      // confirmar que ya no tiene referencias.
-      if (
-        originalImagePath &&
-        originalImagePath !== finalImagePath
-      ) {
-        try {
-          const { count, error: referenceError } =
-            await supabase
-              .from("exercise_library")
-              .select("id", {
-                count: "exact",
-                head: true,
-              })
-              .eq("image_path", originalImagePath);
-
-          if (!referenceError && count === 0) {
-            await supabase.storage
-              .from("exercise-images")
-              .remove([originalImagePath]);
-          }
-        } catch {
-          // El ejercicio ya está guardado.
-          // No se revierte por un fallo de limpieza.
+      if (duplicate && linkVariant && exercise) {
+        const { error: linkError } = await supabase.from("exercise_variants").insert({ exercise_id: exercise.id, variant_id: savedId });
+        if (linkError && linkError.code !== "23505") {
+          setPendingLinkId(savedId);
+          setError("El ejercicio se ha creado, pero no se pudo vincular. Puedes reintentar o volver a la biblioteca.");
+          return;
         }
       }
+
+      // Conservar imágenes anteriores: pueden estar compartidas por variantes.
     } catch (error) {
       // Comprobar referencias antes de limpiar
       // una fotografía recién subida.
@@ -764,7 +765,7 @@ export default function ExerciseForm({
             margin: 0,
           }}
         >
-          {exercise
+          {duplicate ? "Duplicar ejercicio" : exercise
             ? "Editar ejercicio"
             : "Nuevo ejercicio"}
         </h2>
@@ -781,9 +782,7 @@ export default function ExerciseForm({
       </header>
 
       {loading ? (
-        <p style={{ fontSize: 13, color: C.muted }}>
-          Cargando formulario...
-        </p>
+        <FormaLoader />
       ) : loadFailed ? (
         <div style={card}>
           <p role="alert" style={{ color: C.danger }}>
@@ -797,6 +796,12 @@ export default function ExerciseForm({
             Volver e intentar de nuevo
           </button>
         </div>
+      ) : pendingLinkId ? (
+        <form onSubmit={saveExercise} style={card}>
+          <p role="alert" style={{color:C.danger}}>{error}</p>
+          <button type="submit" disabled={busy} style={button}>Reintentar vinculación</button>
+          <button type="button" disabled={busy} style={secondary} onClick={()=>onSaved(pendingLinkId)}>Volver a la biblioteca</button>
+        </form>
       ) : (
         <form
           onSubmit={saveExercise}
@@ -1149,26 +1154,18 @@ export default function ExerciseForm({
               )}
             </div>
 
-            <label style={label}>
-              Equipamiento
-              <input
-                list="exercise-equipment-options"
-                value={equipment}
-                onChange={(e) =>
-                  setEquipment(e.target.value)
-                }
-                placeholder="Seleccionar o escribir"
-                disabled={busy}
-                maxLength={100}
-                style={input}
-              />
-
-              <datalist id="exercise-equipment-options">
-                {equipmentOptions.map((item) => (
-                  <option key={item} value={item} />
-                ))}
-              </datalist>
-            </label>
+            <div style={label}>
+              <label htmlFor="exercise-equipment">Equipamiento</label>
+              <select id="exercise-equipment" value={customEquipment ? "custom" : equipment ? `item:${equipment}` : ""} disabled={busy} style={{...input,paddingRight:40}} onChange={e => {
+                if (e.target.value === "custom") { setCustomEquipment(true); setEquipment(""); }
+                else { setCustomEquipment(false); setEquipment(e.target.value.slice(5)); }
+              }}>
+                <option value="">Seleccionar equipamiento</option>
+                {Array.from(new Set([...equipmentOptions, ...(!customEquipment && equipment ? [equipment] : [])])).map(item => <option key={item} value={`item:${item}`}>{item}</option>)}
+                <option value="custom">+ Añadir otro equipamiento</option>
+              </select>
+              {customEquipment && <input aria-label="Nuevo equipamiento" value={equipment} onChange={e=>setEquipment(e.target.value)} maxLength={100} required disabled={busy} placeholder="Nombre del equipamiento" style={input}/>}
+            </div>
 
           </section>
 
@@ -1198,6 +1195,7 @@ export default function ExerciseForm({
             />
           </section>
 
+          {duplicate && <section style={card}><Toggle title="Vincular como variante del ejercicio original" description="Cada ejercicio conservará su propio histórico." checked={linkVariant} onChange={setLinkVariant} disabled={busy || Boolean(pendingLinkId)}/></section>}
           {/* DESCRIPCIÓN Y TÉCNICA */}
           <section style={card}>
             <h3
