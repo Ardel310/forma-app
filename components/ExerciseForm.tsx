@@ -749,7 +749,7 @@ export default function ExerciseForm({
           border: 0,
           color: C.dark,
           fontSize: 13,
-          fontWeight: 600,
+          fontWeight: 400,
           padding: 0,
         }}
       >
@@ -769,6 +769,8 @@ export default function ExerciseForm({
             ? "Editar ejercicio"
             : "Nuevo ejercicio"}
         </h2>
+        {duplicate && !pendingLinkId && <span style={{display:"inline-block",marginTop:8,background:C.pale,color:C.dark,borderRadius:8,padding:"5px 10px",fontSize:12}}>Borrador · Sin guardar</span>}
+        {pendingLinkId && <p style={{color:C.dark,fontSize:12}}>Ejercicio guardado · Vinculación pendiente</p>}
 
         <p
           style={{
