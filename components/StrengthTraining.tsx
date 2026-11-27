@@ -1,9 +1,10 @@
 "use client";
+import TrainingPlans from "./TrainingPlans";
 import FormaLoader from "./FormaLoader";
 
 import { useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
-import { ArrowLeft, ArrowRight, ChevronDown, ChevronRight, Copy, Dumbbell, History, PlayCircle } from "lucide-react";
+import { ArrowLeft, ArrowRight, ChevronDown, ChevronRight, ClipboardList, Copy, Dumbbell, History, PlayCircle } from "lucide-react";
 import { createClient } from "../lib/supabase/client";
 
 import StrengthSessionForm from "./StrengthSessionForm";
@@ -15,11 +16,11 @@ type Group = {id:string;name:string;color:string};
 function todayMadrid(){return new Intl.DateTimeFormat("en-CA",{timeZone:"Europe/Madrid",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date());}
 function shift(date:string,days:number){const d=new Date(date+"T12:00:00Z");d.setUTCDate(d.getUTCDate()+days);return d.toISOString().slice(0,10);}
 function weekStart(date:string){return shift(date,-((new Date(date+"T12:00:00Z").getUTCDay()+6)%7));}
-type View = "home" | "new" | "repeat" | "continue" | "history";
+type View = "home" | "plans" | "new" | "repeat" | "continue" | "history";
 const C = { green: "#7D8C82", dark: "#596B60", text: "#25382F", muted: "#78847B", pale: "#EEF2EE", border: "#E5EAE5", white: "#FFFFFF" };
 const card: CSSProperties = { background: C.white, border: `1px solid ${C.border}`, borderRadius: 18, padding: 16 };
 const button: CSSProperties = { fontFamily: "inherit", cursor: "pointer", color: C.text, textAlign: "left", width: "100%" };
-const labels = { new: "Nuevo entrenamiento", repeat: "Repetir entrenamiento", continue: "Continuar entrenamiento", history: "Histórico de fuerza" };
+const labels = { plans: "Planes de entrenamiento", new: "Nuevo entrenamiento", repeat: "Repetir entrenamiento", continue: "Continuar entrenamiento", history: "Histórico de fuerza" };
 function dateLabel(date: string) { return new Date(`${date}T12:00:00`).toLocaleDateString("es-ES", { day: "numeric", month: "short", year: "numeric" }); }
 
 export default function StrengthTraining({ onBack }: { onBack: () => void }) {
@@ -84,6 +85,7 @@ export default function StrengthTraining({ onBack }: { onBack: () => void }) {
   }, [supabase, retry]);
   function open(next: View) { setSource(null); setView(next); window.scrollTo({ top: 0 }); }
   const actions = [
+    { key: "plans" as const, Icon: ClipboardList, description: "Crea y reutiliza tus rutinas habituales." },
     { key: "repeat" as const, Icon: Copy, description: "Duplica una sesión anterior." },
     { key: "continue" as const, Icon: PlayCircle, description: pending.length ? "Tienes sesiones pendientes." : "Recupera una sesión pendiente." },
     { key: "history" as const, Icon: History, description: "Consulta tus entrenamientos." },
@@ -92,6 +94,7 @@ export default function StrengthTraining({ onBack }: { onBack: () => void }) {
   const completedSelection=sessions.find(s=>s.id===selectedId);
   if(selectedId && completedSelection) return <StrengthSessionSummary key={selectedId} sessionId={selectedId} onBack={()=>{setSelectedId(null);setRetry(n=>n+1);window.scrollTo({top:0});}} onRepeat={()=>{setSelectedId(null);open("repeat");setSource(completedSelection);setName(completedSelection.name);setDate(today);setDuplicateError("");}}/>;
   if (selectedId) return <StrengthSession key={selectedId} sessionId={selectedId} onBack={() => { setSelectedId(null); setRetry(n => n + 1); open("home"); }} />;
+  if (view === "plans") return <TrainingPlans onBack={() => open("home")} />;
   if (view === "new") return <StrengthSessionForm onBack={() => open("home")} onCreated={(id) => { setRetry(n => n + 1); open("home"); openSession(id); }} />;
   const months=Array.from(new Set(visible.map(s=>s.session_date.slice(0,7))));
   const totalMinutes=visible.reduce((n,s)=>n+(s.duration_minutes??0),0);
@@ -105,7 +108,7 @@ export default function StrengthTraining({ onBack }: { onBack: () => void }) {
     <button
       type="button"
       onClick={() => view === "home" ? onBack() : open("home")}
-      style={{ display: "flex", alignItems: "center", gap: 8, background: "none", border: "none", padding: 0, color: C.dark, fontSize: 13, fontWeight: 600, fontFamily: "inherit", justifySelf: "start", cursor: "pointer" }}
+      style={{ display: "flex", alignItems: "center", gap: 8, background: "none", border: "none", padding: 0, color: C.dark, fontSize: 13, fontWeight: 400, fontFamily: "inherit", justifySelf: "start", cursor: "pointer" }}
     >
       <ArrowLeft size={18} />
       {view === "home" ? "Entrenamiento" : "Fuerza"}
