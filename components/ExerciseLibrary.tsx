@@ -147,7 +147,7 @@ export default function ExerciseLibrary({
   const [layout, setLayout] = useState<"grid" | "list">("grid");
 
   const [view, setView] = useState<
-    "library" | "groups" | "new" | "detail" | "edit"
+    "library" | "groups" | "new" | "detail" | "edit" | "duplicate"
   >("library");
 
   const [selected, setSelected] = useState<Exercise | null>(null);
@@ -326,7 +326,7 @@ export default function ExerciseLibrary({
   }
 
   function openView(
-    next: "library" | "groups" | "new" | "detail" | "edit"
+    next: "library" | "groups" | "new" | "detail" | "edit" | "duplicate"
   ) {
     setView(next);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -434,12 +434,13 @@ export default function ExerciseLibrary({
     );
   }
 
-  if (view === "new" || (view === "edit" && selected)) {
+  if (view === "new" || ((view === "edit" || view === "duplicate") && selected)) {
     return (
       <ExerciseForm
-        key={view === "edit" ? selected?.id : "new"}
-        exercise={view === "edit" ? selected : null}
-        onBack={() => openView(view === "edit" ? "detail" : "library")}
+        key={`${view}:${selected?.id ?? "new"}`}
+        exercise={view === "new" ? null : selected}
+        duplicate={view === "duplicate"}
+        onBack={() => openView(view === "new" ? "library" : "detail")}
         onSaved={() => {
           setSelected(null);
           resetFilters();
@@ -460,6 +461,7 @@ export default function ExerciseLibrary({
           void loadLibrary();
         }}
         onEdit={() => openView("edit")}
+        onDuplicate={(item) => { setSelected(item); openView("duplicate"); }}
         onOpenExercise={openDetail}
         onChanged={() => void loadLibrary()}
       />
