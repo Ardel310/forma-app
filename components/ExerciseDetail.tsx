@@ -3,7 +3,7 @@ import FormaLoader from "./FormaLoader";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
-import { ArrowLeft, Star, Pencil, Dumbbell, Plus, X, Archive, RotateCcw, ChevronRight, ClipboardList, ChartNoAxesCombined, Copy, Ellipsis } from "lucide-react";
+import { ArrowLeft, Star, Pencil, Dumbbell, Plus, X, Archive, RotateCcw, ChevronRight, ClipboardList, ChartNoAxesCombined, Copy, Ellipsis, Trash2 } from "lucide-react";
 import TrainingPerformance from "./TrainingPerformance";
 import { createClient } from "../lib/supabase/client";
 
@@ -84,6 +84,28 @@ export default function ExerciseDetail({ exercise, onBack, onEdit, onDuplicate, 
       setItem(data as Exercise); onChanged();
     } catch(e) { setError(message(e)); } finally { setBusy(false); }
   }
+  async function deleteExercise() {
+    if (busy || loading) return;
+    setMenuOpen(false);
+    setBusy(true); setError("");
+    try {
+      const {count,error: checkError} = await supabase.from("training_exercises").select("id",{count:"exact",head:true}).or(`exercise_id.eq.${id},replaced_exercise_id.eq.${id}`);
+      if (checkError) throw checkError;
+      if (count === null) throw new Error("No se pudo comprobar el histórico.");
+      if (count > 0) {
+        setError("Este ejercicio tiene entrenamientos asociados. Desactívalo para conservar su histórico.");
+        return;
+      }
+      if (!window.confirm("¿Eliminar definitivamente este ejercicio y sus vínculos de variantes?")) return;
+      const {error} = await supabase.from("exercise_library").delete().eq("id",id).select("id").single();
+      if (error) {
+        if (error.code === "23503") throw new Error("El ejercicio tiene referencias asociadas. Desactívalo para conservarlas.");
+        throw error;
+      }
+      // No eliminar la fotografía: puede estar compartida.
+      onBack();
+    } catch(e) { setError(message(e)); } finally { setBusy(false); }
+  }
   async function addVariant() {
     if (busy || loading || !candidates.some(e => e.id === variantId)) return;
     setBusy(true); setError("");
@@ -111,8 +133,8 @@ export default function ExerciseDetail({ exercise, onBack, onEdit, onDuplicate, 
   }
   if(showPerformance) return <TrainingPerformance key={id} initialExerciseId={id} backLabel="Ficha del ejercicio" onBack={()=>{setShowPerformance(false);window.scrollTo({top:0});}}/>;
   return <div style={{display:"grid",gap:15,width:"100%",color:C.text}}>
-    <button type="button" disabled={busy} onClick={onBack} style={{display:"flex",alignItems:"center",justifySelf:"start",gap:8,background:"transparent",border:0,padding:0,color:C.dark,fontFamily:"inherit",fontSize:13,fontWeight:600}}><ArrowLeft size={18}/> Biblioteca de ejercicios</button>
-    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}><h2 style={{margin:0,fontSize:24,fontWeight:600,overflowWrap:"anywhere"}}>{item.name}</h2><button type="button" style={soft} disabled={busy||loading} aria-label={item.is_favorite?"Quitar de favoritos":"Añadir a favoritos"} aria-pressed={item.is_favorite} onClick={()=>void changeFlag("is_favorite")}><Star size={20} fill={item.is_favorite?C.green:"none"}/></button>{onDuplicate && <div style={{position:"relative",flexShrink:0}}><button type="button" style={soft} disabled={busy||loading} aria-label="Más opciones" aria-expanded={menuOpen} onClick={()=>setMenuOpen(v=>!v)}><Ellipsis size={20}/></button>{menuOpen && <div style={{...card,position:"absolute",right:0,top:"100%",zIndex:10,width:205,padding:8,boxShadow:"0 8px 24px #25382F18"}}><button type="button" style={{...soft,justifyContent:"flex-start"}} onClick={()=>{setMenuOpen(false);onDuplicate(item);}}><Copy size={17}/> Duplicar ejercicio</button></div>}</div>}</div>
+    <button type="button" disabled={busy} onClick={onBack} style={{display:"flex",alignItems:"center",justifySelf:"start",gap:8,background:"transparent",border:0,padding:0,color:C.dark,fontFamily:"inherit",fontSize:13,fontWeight:400}}><ArrowLeft size={18}/> Biblioteca de ejercicios</button>
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}><h2 style={{margin:0,fontSize:24,fontWeight:600,overflowWrap:"anywhere"}}>{item.name}</h2><button type="button" style={soft} disabled={busy||loading} aria-label={item.is_favorite?"Quitar de favoritos":"Añadir a favoritos"} aria-pressed={item.is_favorite} onClick={()=>void changeFlag("is_favorite")}><Star size={20} fill={item.is_favorite?C.green:"none"}/></button>{onDuplicate && <div style={{position:"relative",flexShrink:0}}><button type="button" style={soft} disabled={busy||loading} aria-label="Más opciones" aria-expanded={menuOpen} onClick={()=>setMenuOpen(v=>!v)}><Ellipsis size={20}/></button>{menuOpen && <div style={{...card,position:"absolute",right:0,top:"100%",zIndex:10,width:205,padding:8,boxShadow:"0 8px 24px #25382F18"}}><button type="button" style={{...soft,justifyContent:"flex-start"}} onClick={()=>{setMenuOpen(false);onDuplicate(item);}}><Copy size={17}/> Duplicar ejercicio</button><button type="button" style={{...soft,justifyContent:"flex-start",color:C.danger,background:"transparent"}} disabled={busy} onClick={()=>void deleteExercise()}><Trash2 size={17}/> Eliminar ejercicio</button></div>}</div>}</div>
     {error && <div role="alert" style={{...card,color:C.danger,fontSize:12}}>{error}<button type="button" style={soft} disabled={busy||loading} onClick={()=>void load()}>Actualizar datos</button></div>}
     {loading ? <FormaLoader /> : <>
       <section style={card}>{photo(item)}<div style={{display:"flex",flexWrap:"wrap",gap:7}}>{[item.is_active?"Activo":"Desactivado",item.equipment,item.is_unilateral?"Unilateral":null].filter(Boolean).map((t,i)=><span key={i} style={{background:C.pale,color:C.dark,borderRadius:8,padding:"6px 9px",fontSize:11}}>{t}</span>)}</div><button type="button" style={btn} disabled={busy} onClick={onEdit}><Pencil size={17}/> Editar ejercicio</button></section>
