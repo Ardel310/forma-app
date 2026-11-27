@@ -94,7 +94,7 @@ export default function StrengthTraining({ onBack }: { onBack: () => void }) {
   const completedSelection=sessions.find(s=>s.id===selectedId);
   if(selectedId && completedSelection) return <StrengthSessionSummary key={selectedId} sessionId={selectedId} onBack={()=>{setSelectedId(null);setRetry(n=>n+1);window.scrollTo({top:0});}} onRepeat={()=>{setSelectedId(null);open("repeat");setSource(completedSelection);setName(completedSelection.name);setDate(today);setDuplicateError("");}}/>;
   if (selectedId) return <StrengthSession key={selectedId} sessionId={selectedId} onBack={() => { setSelectedId(null); setRetry(n => n + 1); open("home"); }} />;
-  if (view === "plans") return <TrainingPlans onBack={() => open("home")} />;
+  if (view === "plans") return <TrainingPlans onBack={() => open("home")} onStart={(id) => { open("home"); openSession(id); }} />;
   if (view === "new") return <StrengthSessionForm onBack={() => open("home")} onCreated={(id) => { setRetry(n => n + 1); open("home"); openSession(id); }} />;
   const months=Array.from(new Set(visible.map(s=>s.session_date.slice(0,7))));
   const totalMinutes=visible.reduce((n,s)=>n+(s.duration_minutes??0),0);
