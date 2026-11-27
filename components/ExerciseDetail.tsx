@@ -3,7 +3,7 @@ import FormaLoader from "./FormaLoader";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { CSSProperties } from "react";
-import { ArrowLeft, Star, Pencil, Dumbbell, Plus, X, Archive, RotateCcw, ChevronRight, ClipboardList, ChartNoAxesCombined } from "lucide-react";
+import { ArrowLeft, Star, Pencil, Dumbbell, Plus, X, Archive, RotateCcw, ChevronRight, ClipboardList, ChartNoAxesCombined, Copy, Ellipsis } from "lucide-react";
 import TrainingPerformance from "./TrainingPerformance";
 import { createClient } from "../lib/supabase/client";
 
@@ -15,7 +15,7 @@ type Exercise = {
 type Group = { id: string; name: string; color: string; is_active: boolean };
 type Relation = { muscle_group_id: string; is_primary: boolean };
 type Variant = { id: string; exercise_id: string; variant_id: string; notes: string | null };
-type Props = { exercise: Exercise; onBack: () => void; onEdit: () => void; onOpenExercise: (exercise: Exercise) => void; onChanged: () => void };
+type Props = { exercise: Exercise; onBack: () => void; onEdit: () => void; onDuplicate?: (exercise: Exercise) => void; onOpenExercise: (exercise: Exercise) => void; onChanged: () => void };
 const C = { green: "#7D8C82", dark: "#596B60", text: "#25382F", muted: "#78847B", pale: "#EEF2EE", border: "#E5EAE5", white: "#FFFFFF", danger: "#B45353" };
 const card: CSSProperties = { background: C.white, border: `1px solid ${C.border}`, borderRadius: 18, padding: 17, display: "grid", gap: 12 };
 const btn: CSSProperties = { display: "flex", alignItems: "center", justifyContent: "center", gap: 8, border: 0, borderRadius: 12, padding: "12px 14px", minHeight: 42, background: C.green, color: C.white, fontFamily: "inherit", fontSize: 12, fontWeight: 600, cursor: "pointer" };
@@ -26,9 +26,10 @@ const muted: CSSProperties = { fontSize: 12, color: C.muted, margin: 0, lineHeig
 const normalize = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
 const message = (e: unknown) => (e as { message?: string })?.message || "No se pudo completar la operación.";
 
-export default function ExerciseDetail({ exercise, onBack, onEdit, onOpenExercise, onChanged }: Props) {
+export default function ExerciseDetail({ exercise, onBack, onEdit, onDuplicate, onOpenExercise, onChanged }: Props) {
   const supabase = useMemo(() => createClient(), []);
   const [item, setItem] = useState(exercise);
+  const [menuOpen,setMenuOpen] = useState(false);
   const [showPerformance,setShowPerformance] = useState(false);
   const [groups, setGroups] = useState<Group[]>([]);
   const [relations, setRelations] = useState<Relation[]>([]);
@@ -111,7 +112,7 @@ export default function ExerciseDetail({ exercise, onBack, onEdit, onOpenExercis
   if(showPerformance) return <TrainingPerformance key={id} initialExerciseId={id} backLabel="Ficha del ejercicio" onBack={()=>{setShowPerformance(false);window.scrollTo({top:0});}}/>;
   return <div style={{display:"grid",gap:15,width:"100%",color:C.text}}>
     <button type="button" disabled={busy} onClick={onBack} style={{display:"flex",alignItems:"center",justifySelf:"start",gap:8,background:"transparent",border:0,padding:0,color:C.dark,fontFamily:"inherit",fontSize:13,fontWeight:600}}><ArrowLeft size={18}/> Biblioteca de ejercicios</button>
-    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}><h2 style={{margin:0,fontSize:24,fontWeight:600,overflowWrap:"anywhere"}}>{item.name}</h2><button type="button" style={soft} disabled={busy||loading} aria-label={item.is_favorite?"Quitar de favoritos":"Añadir a favoritos"} aria-pressed={item.is_favorite} onClick={()=>void changeFlag("is_favorite")}><Star size={20} fill={item.is_favorite?C.green:"none"}/></button></div>
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}><h2 style={{margin:0,fontSize:24,fontWeight:600,overflowWrap:"anywhere"}}>{item.name}</h2><button type="button" style={soft} disabled={busy||loading} aria-label={item.is_favorite?"Quitar de favoritos":"Añadir a favoritos"} aria-pressed={item.is_favorite} onClick={()=>void changeFlag("is_favorite")}><Star size={20} fill={item.is_favorite?C.green:"none"}/></button>{onDuplicate && <div style={{position:"relative",flexShrink:0}}><button type="button" style={soft} disabled={busy||loading} aria-label="Más opciones" aria-expanded={menuOpen} onClick={()=>setMenuOpen(v=>!v)}><Ellipsis size={20}/></button>{menuOpen && <div style={{...card,position:"absolute",right:0,top:"100%",zIndex:10,width:205,padding:8,boxShadow:"0 8px 24px #25382F18"}}><button type="button" style={{...soft,justifyContent:"flex-start"}} onClick={()=>{setMenuOpen(false);onDuplicate(item);}}><Copy size={17}/> Duplicar ejercicio</button></div>}</div>}</div>
     {error && <div role="alert" style={{...card,color:C.danger,fontSize:12}}>{error}<button type="button" style={soft} disabled={busy||loading} onClick={()=>void load()}>Actualizar datos</button></div>}
     {loading ? <FormaLoader /> : <>
       <section style={card}>{photo(item)}<div style={{display:"flex",flexWrap:"wrap",gap:7}}>{[item.is_active?"Activo":"Desactivado",item.equipment,item.is_unilateral?"Unilateral":null].filter(Boolean).map((t,i)=><span key={i} style={{background:C.pale,color:C.dark,borderRadius:8,padding:"6px 9px",fontSize:11}}>{t}</span>)}</div><button type="button" style={btn} disabled={busy} onClick={onEdit}><Pencil size={17}/> Editar ejercicio</button></section>
