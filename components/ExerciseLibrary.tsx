@@ -497,7 +497,7 @@ export default function ExerciseLibrary({
           background: "transparent",
           color: C.dark,
           fontSize: 13,
-          fontWeight: 600,
+          fontWeight: 400,
           padding: 0,
         }}
       >
